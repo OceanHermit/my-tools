@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>キズナかるた Online</title>
+
+    <!-- CSS (Tailwind & Custom) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .writing-vertical-rl { writing-mode: vertical-rl; text-orientation: upright; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .safe-area-pb { padding-bottom: env(safe-area-inset-bottom, 20px); }
+        /* ゲーム画面は「画面ぴったり」の高さに固定し、盤面だけを内部スクロールさせる。
+           min-height だと盤面の高さぶんページ全体が伸び、読み札や結果表示が画面外へ流れてしまう。
+           dvh はモバイルのアドレスバー分を除いた実際の表示領域（非対応ブラウザは vh にフォールバック）。 */
+        .app-screen { height: 100vh; height: 100dvh; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: manipulation; }
+
+        /* エラー表示用トースト（邪魔にならないように右上に表示） */
+        #error-console {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 90%;
+            max-width: 350px;
+            z-index: 9999;
+            pointer-events: none; /* コンテナ自体はクリックを透過 */
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .error-toast {
+            pointer-events: auto; /* トースト自体はクリック可能 */
+            animation: slideIn 0.3s ease-out;
+            background-color: white;
+            border-left: 4px solid #ef4444;
+            padding: 12px;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            font-size: 13px;
+            color: #374151;
+            opacity: 0.95;
+        }
+        .error-toast strong { display: block; color: #b91c1c; margin-bottom: 2px; font-size: 14px; }
+        .error-toast pre { margin-top: 4px; font-size: 11px; background: #f3f4f6; padding: 4px; border-radius: 2px; overflow-x: auto; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 読み込みアニメーション */
+        @keyframes pulse-text { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .animate-pulse-text { animation: pulse-text 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+
+    <!-- React Libraries -->
+    <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- 【重要】バージョン固定。無指定(最新)だとCDN側の破壊的変更に巻き込まれる（過去に白画面化した）。 -->
+    <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+    <!-- 【重要】Babel標準の最新版はJSXの既定が「自動ランタイム」になり、
+         import { jsx } from "react/jsx-runtime" を生成してしまう（非モジュール環境では実行時エラー→白画面）。
+         クラシックランタイム（React.createElement）を強制するカスタムプリセットを登録して回避する。 -->
+    <script>
+        Babel.registerPreset('react-classic', {
+            presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+        });
+    </script>
+
+    <!-- Firebase Libraries (Compat版) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+</head>
+<body class="bg-stone-100 text-stone-800">
+    <!-- エラー表示エリア -->
+    <div id="error-console"></div>
+    <div id="root"></div>
+
+    <script>
+        // エラーハンドリング強化（トースト通知）
+        function showError(title, detail) {
+            const container = document.getElementById('error-console');
+            const id = 'toast-' + Date.now();
+            const detailText = typeof detail === 'object' ? (detail.message || JSON.stringify(detail)) : detail;
+
+            const html = `
+                <div id="${id}" class="error-toast">
+                    <strong>⚠️ ${title}</strong>
+                    <span>${detailText}</span>
+                    <div style="text-align:right; margin-top:4px;">
+                        <button onclick="document.getElementById('${id}').remove()" style="color:#9ca3af; text-decoration:underline; font-size:11px;">閉じる</button>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', html);
+            console.error(title, detail);
+
+            // 7秒後に自動消去
+            setTimeout(() => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.opacity = '0';
+                    el.style.transition = 'opacity 0.5s';
+                    setTimeout(() => el.remove(), 500);
+                }
+            }, 7000);
+        }
+
+        window.onerror = function(msg, url, line, col, error) {
+            if (msg === 'Script error.' && line === 0) {
+                // 外部スクリプトエラーは頻発するためコンソールのみ
+                console.warn('External script error');
+            } else {
+                showError('JavaScriptエラー', `Message: ${msg}\nLine: ${line}`);
+            }
+        };
+        window.onunhandledrejection = function(e) {
+            // キャンセル系エラーは無視
+            const reason = e.reason ? (e.reason.message || e.reason) : 'Unknown Error';
+            if (typeof reason === 'string' && (reason.includes('cancelled') || reason.includes('Aborted'))) return;
+            showError('通信・処理エラー', reason);
+        };
+    </script>
+
+    <!-- Babelプリセットを明示 -->
+    <script type="text/babel" data-presets="env,react-classic">
+        const { useState, useEffect, useRef } = React;
+
+        // =================================================================
+        // ★設定エリア 1/2: Firebase設定★
+        // =================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDNs1rwsKmY0MHbFhelmkm0J1AdALKsCPE",
+            authDomain: "karuta-game-c8fc8.firebaseapp.com",
+            projectId: "karuta-game-c8fc8",
+            storageBucket: "karuta-game-c8fc8.firebasestorage.app",
+            messagingSenderId: "1096706703267",
+            appId: "1:1096706703267:web:f36f57565ccb2329316416",
+        };
+
+
+        // =================================================================
+        // ★設定エリア 2/2: 音声URL設定★
+        // Firebase StorageのURLに書き換えてください
+        // =================================================================
+        const AUDIO_URLS = {
+            BGM: "https://firebasestorage.googleapis.com/v0/b/karuta-game-c8fc8.firebasestorage.app/o/BGM.mp3?alt=media&token=b967f0ba-6c4f-4bd5-a7a0-bf9e387f498b",          // BGM
+            GET: "https://firebasestorage.googleapis.com/v0/b/karuta-game-c8fc8.firebasestorage.app/o/SE_get.mp3?alt=media&token=d1e3c19a-b44b-4f45-8964-b134e2da10fb",       // 自分が取った時
+            MISS: "https://firebasestorage.googleapis.com/v0/b/karuta-game-c8fc8.firebasestorage.app/o/SE_miss.mp3?alt=media&token=73010425-6c4a-4d8a-8f9e-d739070230c7",     // お手つき
+            OPPONENT: "https://firebasestorage.googleapis.com/v0/b/karuta-game-c8fc8.firebasestorage.app/o/SE_opponent.mp3?alt=media&token=9f0e5317-02f1-4241-a04e-bff0eba9623a", // 相手が取った時
+            READY: "https://firebasestorage.googleapis.com/v0/b/karuta-game-c8fc8.firebasestorage.app/o/SE_ready.mp3?alt=media&token=cd4323aa-5bfe-439c-9e69-079298c110a2"    // 読み上げ開始前
+        };
+
+        // =================================================================
+        // ★音量設定（0.0〜1.0）★ 聞こえ方は端末やスピーカーで変わるので、ここで調整してください。
+        // 読み上げの声を聞き取りやすくするため、読み上げ中は自動でBGMを絞ります（ダッキング）。
+        // =================================================================
+        const VOLUME = {
+            BGM: 0.18,               // BGM（通常時）
+            BGM_WHILE_READING: 0.05, // BGM（読み上げ中／小さいほど声が聞き取りやすい）
+            SE: 0.6,                 // 効果音（取った・お手つき・相手が取った・読み上げ開始）
+            VOICE: 1.0,              // 読み上げの声
+        };
+        // =================================================================
+
+        // 設定チェック
+        if (firebaseConfig.apiKey === "AIzaSy..." || firebaseConfig.projectId === "...") {
+            showError("設定未完了", "Firebase設定がコードに反映されていません。index.htmlを編集してください。");
+        }
+
+        // Firebase初期化
+        if (!firebase.apps.length) {
+            try {
+                firebase.initializeApp(firebaseConfig);
+            } catch (e) {
+                showError("Firebase初期化エラー", e.message);
+            }
+        }
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+        const APP_ID = 'karuta-v1';
+
+        // --- アイコン定義 ---
+        const Icon = ({ path, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{path}</svg>
+        );
+        const Icons = {
+            Play: <path d="M5 3l14 9-14 9V3z" />,
+            Users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+            Crown: <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />,
+            Settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.39a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />,
+            LogOut: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></>,
+            ArrowRight: <><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
+            Trophy: <><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></>,
+            User: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>,
+            Hash: <><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="15" x2="20" y2="15" /><line x1="10" y1="3" x2="8" y2="21" /><line x1="16" y1="3" x2="14" y2="21" /></>,
+            Shuffle: <><polyline points="16 3 21 3 21 8" /><line x1="4" y1="20" x2="21" y2="3" /><polyline points="21 16 21 21 16 21" /><line x1="15" y1="15" x2="21" y2="21" /><line x1="4" y1="4" x2="9" y2="9" /></>,
+            Coffee: <><path d="M17 8h1a4 4 0 1 1 0 8h-1" /><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z" /><line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" /></>,
+            Home: <><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
+            RotateCcw: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>,
+            Volume2: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></>,
+            VolumeX: <><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></>
+        };
+
+        const KARUTA_DATA = [
+            { id: 1, yomi: "恋しくば南無阿弥陀仏を称うべし 我も六字の中にこそ住め", tori: "恋しくば南無阿弥陀仏を称うべし 我も六字の中にこそ住め" },
+            { id: 2, yomi: "火の中を分けても法は聞くべきに 雨風雪はもののかずかは", tori: "火の中を分けても法は聞くべきに 雨風雪はもののかずかは" },
+            { id: 3, yomi: "ままにならぬとおひつを投げりゃ そこらあたりはままだらけ", tori: "ままにならぬとおひつを投げりゃ そこらあたりはままだらけ" },
+            { id: 4, yomi: "明日よりは誰にはばかるところなく 弥陀のみもとでのびのびと寝ん", tori: "明日よりは誰にはばかるところなく 弥陀のみもとでのびのびと寝ん" },
+            { id: 5, yomi: "年毎に咲くや吉野の山桜 木を割りてみよ花のありかは", tori: "年毎に咲くや吉野の山桜 木を割りてみよ花のありかは" },
+            { id: 6, yomi: "さらばなり有為の奥山今日こえて 弥陀のみもとにゆくぞ嬉しき", tori: "さらばなり有為の奥山今日こえて 弥陀のみもとにゆくぞ嬉しき" },
+            { id: 7, yomi: "親思う心にまさる親心 今日のおとずれ何ときくらん", tori: "親思う心にまさる親心 今日のおとずれ何ときくらん" },
+            { id: 8, yomi: "人は城人は石垣人は堀 情は味方仇は大敵", tori: "人は城人は石垣人は堀 情は味方仇は大敵" },
+            { id: 9, yomi: "呼べば呼ぶ呼ばねば呼ばぬ山彦ぞ まず笑顔せよみな笑顔する", tori: "呼べば呼ぶ呼ばねば呼ばぬ山彦ぞ まず笑顔せよみな笑顔する" },
+            { id: 10, yomi: "うれしさを昔はそでにつつみけり こよいは身にも余りぬるかな", tori: "うれしさを昔はそでにつつみけり こよいは身にも余りぬるかな" },
+            { id: 11, yomi: "悲しむなその闇破る光あり 歎きの里は随喜の園に", tori: "悲しむなその闇破る光あり 歎きの里は随喜の園に" },
+            { id: 12, yomi: "朝夕の飯さえこわしやわらかし 思うままにはならぬ世の中", tori: "朝夕の飯さえこわしやわらかし 思うままにはならぬ世の中" },
+            { id: 13, yomi: "日も月も蛍の光さながらに 行く手に弥陀の光輝く", tori: "日も月も蛍の光さながらに 行く手に弥陀の光輝く" },
+            { id: 14, yomi: "財産も名誉も一時の稲光 あとに残るはユメのタメ息", tori: "財産も名誉も一時の稲光 あとに残るはユメのタメ息" },
+            { id: 15, yomi: "今死ぬと思うにすぎし宝なし 心にしめて常に忘るな", tori: "今死ぬと思うにすぎし宝なし 心にしめて常に忘るな" },
+            { id: 16, yomi: "いたずらに過ぎる月日は多けれど 法を求むる時ぞ少なき", tori: "いたずらに過ぎる月日は多けれど 法を求むる時ぞ少なき" },
+            { id: 17, yomi: "徳が元金は末なり徳積めば 金は自由になるものと知れ", tori: "徳が元金は末なり徳積めば 金は自由になるものと知れ" },
+            { id: 18, yomi: "別れ路のさのみ嘆くな法の友 また遇う国のありと思えば", tori: "別れ路のさのみ嘆くな法の友 また遇う国のありと思えば" },
+            { id: 19, yomi: "会者定離ありとはかねて聞きしかど 昨日今日とは思わざりけり", tori: "会者定離ありとはかねて聞きしかど 昨日今日とは思わざりけり" },
+            { id: 20, yomi: "何時もくるいつもの人が何時もする 何時もの話何時も尊い", tori: "何時もくるいつもの人が何時もする 何時もの話何時も尊い" },
+            { id: 21, yomi: "山も山道も昔に変わらねど 変わりはてたる我が心かな", tori: "山も山道も昔に変わらねど 変わりはてたる我が心かな" },
+            { id: 22, yomi: "為せば為る成さねば成らぬ何事も 成らぬは人の成さぬなりけり", tori: "為せば為る成さねば成らぬ何事も 成らぬは人の成さぬなりけり" },
+            { id: 23, yomi: "越えなばと思いし峰にきて見れば なお行くさきは山路なりけり", tori: "越えなばと思いし峰にきて見れば なお行くさきは山路なりけり" },
+            { id: 24, yomi: "あれを見よみやまの桜咲きにけり 真心つくせ人しらずとも", tori: "あれを見よみやまの桜咲きにけり 真心つくせ人しらずとも" },
+            { id: 25, yomi: "門松は冥土の旅の一里塚 めでたくもありめでたくもなし", tori: "門松は冥土の旅の一里塚 めでたくもありめでたくもなし" },
+            { id: 26, yomi: "引き寄せて結べば柴のいおりにて 解くればもとの野原なりけり", tori: "引き寄せて結べば柴のいおりにて 解くればもとの野原なりけり" },
+            { id: 27, yomi: "負けている人を弱しと思うなよ 忍ぶ心の強きゆえなり", tori: "負けている人を弱しと思うなよ 忍ぶ心の強きゆえなり" },
+            { id: 28, yomi: "鳥辺山昨日の煙今日も立つ 眺めて通る人も何時まで", tori: "鳥辺山昨日の煙今日も立つ 眺めて通る人も何時まで" },
+            { id: 29, yomi: "踏まれても根強く忍べ道の草 やがて花咲く春の来るまで", tori: "踏まれても根強く忍べ道の草 やがて花咲く春の来るまで" },
+            { id: 30, yomi: "蒔けば生え蒔かねば生えぬよしあしの 人はしらねど種は正直", tori: "蒔けば生え蒔かねば生えぬよしあしの 人はしらねど種は正直" },
+            { id: 31, yomi: "後の世と聞けば遠きに似たれども 知らずや今日もその日なるらん", tori: "後の世と聞けば遠きに似たれども 知らずや今日もその日なるらん" },
+            { id: 32, yomi: "人生は食てねて起きて糞たれて 子は親となる親は子となる", tori: "人生は食てねて起きて糞たれて 子は親となる親は子となる" },
+            { id: 33, yomi: "みな人よ手足を運べ法の山 空しき帰り千載に悔ゆ", tori: "みな人よ手足を運べ法の山 空しき帰り千載に悔ゆ" },
+            { id: 34, yomi: "よもすがら仏の道を求むれば わがこころにぞたずね入りぬる", tori: "よもすがら仏の道を求むれば わがこころにぞたずね入りぬる" },
+            { id: 35, yomi: "ただ見れば何の苦もなき水鳥の 足にひまなきわが思いかな", tori: "ただ見れば何の苦もなき水鳥の 足にひまなきわが思いかな" },
+            { id: 36, yomi: "寒くともたもとに入れよ西の風 弥陀の国より吹くと思えば", tori: "寒くともたもとに入れよ西の風 弥陀の国より吹くと思えば" },
+            { id: 37, yomi: "石川や浜の真砂は尽くるとも 世に盗人の種子は尽くまじ", tori: "石川や浜の真砂は尽くるとも 世に盗人の種子は尽くまじ" },
+            { id: 38, yomi: "堪忍の二字か四字かは知らねども こらえ忍ぶぞまことなりけり", tori: "堪忍の二字か四字かは知らねども こらえ忍ぶぞまことなりけり" },
+            { id: 39, yomi: "この里に親をなくした子はなきか み法の風になびく人なし", tori: "この里に親をなくした子はなきか み法の風になびく人なし" },
+            { id: 40, yomi: "世の中は一つかなえばまた二つ 三つ四つ五つ六つかしの世や", tori: "世の中は一つかなえばまた二つ 三つ四つ五つ六つかしの世や" },
+            { id: 41, yomi: "手を打てば鹿は驚き魚は寄る 茶店の女中は返事する", tori: "手を打てば鹿は驚き魚は寄る 茶店の女中は返事する" },
+            { id: 42, yomi: "後の世を渡す橋とぞ思いしに 世渡る僧となるぞ悲しき", tori: "後の世を渡す橋とぞ思いしに 世渡る僧となるぞ悲しき" },
+            { id: 43, yomi: "知るとのみ思いながらに 何よりも知られぬものは己なりけり", tori: "知るとのみ思いながらに 何よりも知られぬものは己なりけり" },
+            { id: 44, yomi: "阿弥陀には隔つる心なけれども 蓋ある水に月はやどらじ", tori: "阿弥陀には隔つる心なけれども 蓋ある水に月はやどらじ" },
+            { id: 45, yomi: "病む子をば残して帰る旅の空 心はそこに残りこそすれ", tori: "病む子をば残して帰る旅の空 心はそこに残りこそすれ" },
+            { id: 46, yomi: "露と落ち露と消えにし我が身かな 浪速のことも夢のまた夢", tori: "露と落ち露と消えにし我が身かな 浪速のことも夢のまた夢" },
+            { id: 47, yomi: "面影のかわらで歳のつもれかし たとえいのちにかぎりあるとも", tori: "面影のかわらで歳のつもれかし たとえいのちにかぎりあるとも" },
+            { id: 48, yomi: "今日ほめて明日悪くいう人の口 泣くも笑うもうその世の中", tori: "今日ほめて明日悪くいう人の口 泣くも笑うもうその世の中" },
+            { id: 49, yomi: "世の中の娘が嫁と花咲いて　嬶としぼんで婆と散りゆく", tori: "世の中の娘が嫁と花咲いて　嬶としぼんで婆と散りゆく" },
+            { id: 50, yomi: "明日ありと思う心のあだ桜 夜半に嵐の吹かぬものかは", tori: "明日ありと思う心のあだ桜 夜半に嵐の吹かぬものかは" },
+        ];
+
+        // =================================================================
+        // ★★★ 読み上げ音声テーブル（読み方を直したいときは、ここだけ編集すればOK）★★★
+        //
+        // ・画面に表示される文字は KARUTA_DATA の yomi（漢字）。この表は「音声読み上げ専用」で、
+        //   画面には一切出ません。読みが変でも見た目は崩れないので安心して編集できます。
+        // ・漢字は誤読されるため、取り札画像のフリガナから起こした「かな」で書いています。
+        //
+        // 【重要】助詞の「は」は「わ」と書いてください。
+        //   ひらがなだけの文だと、読み上げエンジンは「は」を必ず ha と読んでしまいます。
+        //     ×「ひとはしろ」→「ヒト ハ シロ」   ○「ひとわしろ」→「ヒト ワ シロ」
+        //   単語の一部の「は」はそのまま。例:「はなし(話)」「はる(春)」「はし(橋)」「はこべ(運べ)」
+        //   同じ理由で、助詞の「へ」は「え」と書きます。
+        //
+        // 【その他の調整】
+        //   ・「、」を入れるとそこで一拍おきます。間（ま）の調整に使えます。
+        //   ・伸ばしたい時は「あー」、区切りたい時は「・」や空白も使えます。
+        //   ・読みを直したら、ゲームを開き直せば反映されます。
+        // =================================================================
+        const CARD_KANA = {
+            1: "こいしくばなむあみだぶつをとなうべし、われもろくじのなかにこそすめ",
+            2: "ひのなかをわけてものりわきくべきに、あめかぜゆきわもののかずかわ",
+            3: "ままにならぬとおひつをなげりゃ、そこらあたりわままだらけ",
+            4: "あすよりわだれにはばかるところなく、みだのみもとでのびのびとねん",
+            5: "としごとにさくやよしのの、やまざくらきをわりてみよはなのありかわ",
+            6: "さらばなりういのおくやまきょうこえて、みだのみもとにゆくぞうれしき",
+            7: "おやおもうこころにまさるおやごころ、きょうのおとずれなにときくらん",
+            8: "ひとわしろひとわいしがきひとわほり、じょうわみかたあだわたいてき",
+            9: "よべばよぶよばねばよばぬやまびこぞ、まずえがおせよみなえがおする",
+            10: "うれしさをむかしわそでにつつみけり、こよいわみにもあまりぬるかな",
+            11: "かなしむなそのやみやぶるひかりあり、なげきのさとわずいきのそのに",
+            12: "あさゆうのめしさえこわしやわらかし、おもうままにわならぬよのなか",
+            13: "ひもつきもほたるのひかりさながらに、ゆくてにみだのひかりかがやく",
+            14: "ざいほうもめいよもいちじのいなびかり、あとにのこるわゆめのためいき",
+            15: "いましぬとおもうにすぎしたからなし、こころにしめてつねにわするな",
+            16: "いたずらにすぎるつきひわおおけれど、ほうをもとむるときぞすくなき",
+            17: "とくがもとかねわすえなりとくつめば、かねわじゆうになるものとしれ",
+            18: "わかれじのさのみなげくなのりのとも、またあうくにのありとおもえば",
+            19: "えしゃじょうりありとわかねてききしかど、きのうきょうとわおもわざりけり",
+            20: "いつもくるいつものひとがいつもする、いつものはなしいつもとうとい",
+            21: "やまもやまみちもむかしにかわらねど、かわりはてたるわがこころかな",
+            22: "なせばなるなさねばならぬなにごとも、ならぬわひとのなさぬなりけり",
+            23: "こえなばとおもいしみねにきてみれば、なおゆくさきわやまじなりけり",
+            24: "あれをみよみやまのさくらさきにけり、まごころつくせひとしらずとも",
+            25: "かどまつわめいどのたびのいちりづか、めでたくもありめでたくもなし",
+            26: "ひきよせてむすべばしばのいおりにて、とくればもとののはらなりけり",
+            27: "まけているひとをよわしとおもうなよ、しのぶこころのつよきゆえなり",
+            28: "とりべやまきのうのけむりきょうもたつ、ながめてとおるひともいつまで",
+            29: "ふまれてもねづよくしのべみちのくさ、やがてはなさくはるのくるまで",
+            30: "まけばはえまかねばはえぬよしあしの、ひとわしらねどたねわしょうじき",
+            31: "のちのよときけばとおきににたれども、しらずやきょうもそのひなるらん",
+            32: "じんせいわくてねておきてくそたれて、こわおやとなるおやわことなる",
+            33: "みなひとよてあしをはこべのりのやま、むなしきかえりせんさいにくゆ",
+            34: "よもすがらほとけのみちをもとむれば、わがこころにぞたずねいりぬる",
+            35: "ただみればなにのくもなきみずどりの、あしにひまなきわがおもいかな",
+            36: "さむくともたもとにいれよにしのかぜ、みだのくによりふくとおもえば",
+            37: "いしかわやはまのまさごわつくるとも、よにぬすびとのたねわつくまじ",
+            38: "かんにんのにじかよじかわしらねども、こらえしのぶぞまことなりけり",
+            39: "このさとにおやをなくしたこわなきか、みのりのかぜになびくひとなし",
+            40: "よのなかわひとつかなえばまたふたつ、みつよついつつむつかしのよや",
+            41: "てをうてばしかわおどろきうおわよる、ちゃみせのにょちゅうわへんじする",
+            42: "のちのよをわたすはしとぞおもいしに、よわたるそうとなるぞかなしき",
+            43: "しるとのみおもいながらに、なによりもしられぬものわおのれなりけり",
+            44: "あみだにわへだつるこころなけれども、ふたあるみずにつきわやどらじ",
+            45: "やむこをばのこしてかえるたびのそら、こころわそこにのこりこそすれ",
+            46: "つゆとおちつゆときえにしわがみかな、なにわのこともゆめのまたゆめ",
+            47: "おもかげのかわらでとしのつもれかし、たとえいのちにかぎりあるとも",
+            48: "きょうほめてあすわるくいうひとのくち、なくもわらうもうそのよのなか",
+            49: "よのなかのむすめがよめとはなさいて、かかあとしぼんでばばとちりゆく",
+            50: "あすありとおもうこころのあだざくら、よわにあらしのふかぬものかわ",
+        };
+
+        // =================================================================
+        // ★取り札画像設定★
+        // Firebase Storage の「取り札」フォルダに、下記のファイル名（読み仮名 + .jpg）で
+        // 画像をアップロードしてください。（例: 取り札/こいしくば.jpg）
+        // id と読み仮名（＝画像ファイル名）の対応表。
+        // =================================================================
+        const TORIFUDA_IMAGE_DIR = '取り札'; // Storage内のフォルダ名
+        const CARD_IMAGE_NAMES = {
+            1: "こいしくば",  2: "ひのなかを",  3: "ままになら",  4: "あすよりは",  5: "としごとに",
+            6: "さらばなり",  7: "おやおもう",  8: "ひとはしろ",  9: "よべばよぶ", 10: "うれしさを",
+            11: "かなしむな", 12: "あさゆうの", 13: "ひもつきも", 14: "ざいほうも", 15: "いましぬと",
+            16: "いたずらに", 17: "とくがもと", 18: "わかれじの", 19: "えしゃじょう", 20: "いつもくる",
+            21: "やまもやま", 22: "なぜばなる", 23: "こえなばと", 24: "あれをみよ", 25: "かどまつは",
+            26: "ひきよせて", 27: "まけている", 28: "とりべやま", 29: "ふまれても", 30: "まけばはえ",
+            31: "のちのよと", 32: "じんせいは", 33: "みなひとよ", 34: "よもすがら", 35: "ただみれば",
+            36: "さむくとも", 37: "いしかわや", 38: "かんにんの", 39: "このさとに", 40: "よのなかは",
+            41: "てをうてば", 42: "のちのよを", 43: "しるとのみ", 44: "あみだには", 45: "やむこをば",
+            46: "つゆとおち", 47: "おもかげの", 48: "きょうほめて", 49: "よのなかの", 50: "あすありと",
+        };
+
+        // 取り札画像の公開ダウンロードURLを取得する（Storage SDK 経由。トークン不要）
+        // 失敗した札は URL を持たず、描画側で従来のテキスト表示にフォールバックする。
+        const fetchTorifudaImageUrls = async () => {
+            const entries = await Promise.all(
+                KARUTA_DATA.map(async (card) => {
+                    const name = CARD_IMAGE_NAMES[card.id];
+                    if (!name) return [card.id, null];
+                    try {
+                        const url = await storage.ref(`${TORIFUDA_IMAGE_DIR}/${name}.jpg`).getDownloadURL();
+                        // 画像バイトを先読みしてブラウザキャッシュに載せる
+                        const img = new Image();
+                        img.src = url;
+                        return [card.id, url];
+                    } catch (e) {
+                        console.warn(`取り札画像の取得に失敗: id=${card.id} (${name}.jpg)`, e?.code || e);
+                        return [card.id, null];
+                    }
+                })
+            );
+            return Object.fromEntries(entries);
+        };
+        // =================================================================
+
+        // 札の表示サイズ（プレイヤーが切り替え可能）。小さくするほど一画面に多く並び、スクロールせず探せる。
+        // 列数は grid-template-columns の auto-fill で画面幅から自動決定する。
+        // ※ Tailwind の動的クラス（grid-cols-N 等）は CDN のCSS生成が非同期で、
+        //   切り替えた瞬間にグリッドが1列へ崩れることがあるため、ここは素のCSSで指定する。
+        const CARD_SIZES = {
+            s: { label: '小', min: 62,  gap: 6 },
+            m: { label: '中', min: 78,  gap: 8 },
+            l: { label: '大', min: 104, gap: 10 },
+        };
+        const CARD_SIZE_ORDER = ['s', 'm', 'l'];
+
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
+        const ConfirmModal = ({ title, onConfirm, onCancel }) => (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+                    <h3 className="text-lg font-bold text-stone-800 mb-4">{title}</h3>
+                    <div className="flex gap-3 justify-end">
+                        <button onClick={onCancel} className="px-4 py-2 text-stone-500 font-bold hover:bg-stone-100 rounded-lg">キャンセル</button>
+                        <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white font-bold hover:bg-red-700 rounded-lg">実行する</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // 取り札1枚（画像 or テキストフォールバック）
+        const TorifudaFace = ({ cardData, imageUrl }) => {
+            const [imgError, setImgError] = useState(false);
+            if (imageUrl && !imgError) {
+                return (
+                    <img
+                        src={imageUrl}
+                        alt={cardData.tori}
+                        draggable="false"
+                        onError={() => setImgError(true)}
+                        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+                    />
+                );
+            }
+            // 画像が無い/読み込み失敗時は従来の縦書きテキスト（枠なし・角丸なし）
+            return (
+                <div className="absolute inset-0 bg-amber-100 flex items-center justify-center">
+                    <span className="writing-vertical-rl text-stone-800 font-bold text-sm md:text-lg leading-loose select-none" style={{ fontFamily: '"Noto Serif JP", serif' }}>{cardData.tori}</span>
+                </div>
+            );
+        };
+
+        // 札の大きさプレビュー。実際の画面幅から列数を計算するので、
+        // 「自分の端末でどう並ぶか」がそのまま縮小表示される。
+        const CardSizePreview = ({ sizeKey, images }) => {
+            const s = CARD_SIZES[sizeKey];
+            const avail = Math.min(window.innerWidth, 1024) - 16; // 盤面の実効幅（max-w-5xl と p-2 を考慮）
+            const cols = Math.max(1, Math.floor((avail + s.gap) / (s.min + s.gap)));
+            // 3つのプレビューで枠の高さを揃え、はみ出す分は切り取る（＝スクショの一部を見ている状態）。
+            // 枠を埋めるのに必要な行数を、札の縦横比(2:3)から概算する。
+            const BOX_H = 56, APPROX_W = 72; // プレビュー枠のおおよその実寸(px)
+            const rows = Math.max(2, Math.min(10, Math.ceil(BOX_H / ((APPROX_W / cols) * 1.5 + 1))));
+            const cells = Math.min(cols * rows, 96);
+            return (
+                <div className="bg-stone-800 overflow-hidden" style={{ height: BOX_H + 'px', display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '1px', padding: '1px', alignContent: 'start' }}>
+                    {Array.from({ length: cells }, (_, i) => {
+                        const id = KARUTA_DATA[i % KARUTA_DATA.length].id;
+                        return (images && images[id])
+                            ? <img key={i} src={images[id]} alt="" className="w-full aspect-[2/3] object-cover" />
+                            : <div key={i} className="w-full aspect-[2/3] bg-amber-100" />;
+                    })}
+                </div>
+            );
+        };
+
+        const LoadingScreen = ({ message }) => (
+            <div className="min-h-screen flex items-center justify-center bg-stone-100 text-stone-600 p-4">
+                <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                    <div>
+                        <p className="font-bold">読み込み中...</p>
+                        {message && <p className="text-sm text-stone-400 mt-2 whitespace-pre-wrap">{message}</p>}
+                    </div>
+                </div>
+            </div>
+        );
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [playerName, setPlayerName] = useState('');
+            const [room, setRoom] = useState(null);
+            const [view, setView] = useState('landing');
+            const [errorMsg, setErrorMsg] = useState('');
+            const [showConfirmModal, setShowConfirmModal] = useState(false);
+            const [countdown, setCountdown] = useState(null);
+            const [longLoading, setLongLoading] = useState(false);
+            const [isResetting, setIsResetting] = useState(false);
+            const [displayedYomi, setDisplayedYomi] = useState('');
+            const [cardImages, setCardImages] = useState({});
+            const [muted, setMuted] = useState(false);
+            const [introCountdown, setIntroCountdown] = useState(null);
+            const [cardSize, setCardSize] = useState(() => {
+                try { return localStorage.getItem('karuta_card_size') || 'm'; } catch (e) { return 'm'; }
+            });
+
+            const chooseCardSize = (key) => {
+                setCardSize(key);
+                try { localStorage.setItem('karuta_card_size', key); } catch (e) {}
+            };
+            const cycleCardSize = () => {
+                chooseCardSize(CARD_SIZE_ORDER[(CARD_SIZE_ORDER.indexOf(cardSize) + 1) % CARD_SIZE_ORDER.length]);
+            };
+
+            const bgmRef = useRef(new Audio(AUDIO_URLS.BGM));
+            const seGetRef = useRef(new Audio(AUDIO_URLS.GET));
+            const seMissRef = useRef(new Audio(AUDIO_URLS.MISS));
+            const seOpponentRef = useRef(new Audio(AUDIO_URLS.OPPONENT));
+            const seReadyRef = useRef(new Audio(AUDIO_URLS.READY));
+            const mutedRef = useRef(false);
+            const introDoneRef = useRef(false);
+            const duckingRef = useRef(false); // 読み上げ中にBGMを絞っているか
+
+            // 読み上げ中だけBGMを下げる（ダッキング）。声が埋もれないようにするための処理。
+            const applyBgmVolume = () => {
+                bgmRef.current.volume = duckingRef.current ? VOLUME.BGM_WHILE_READING : VOLUME.BGM;
+            };
+            const setDucking = (on) => {
+                duckingRef.current = on;
+                applyBgmVolume();
+            };
+
+            // muted を ref にも同期（setTimeout/コールバック内から最新値を参照するため）
+            useEffect(() => { mutedRef.current = muted; }, [muted]);
+
+            // 効果音の再生（ミュート対応）
+            const playSE = (ref) => {
+                if (mutedRef.current) return;
+                try { ref.current.currentTime = 0; ref.current.play().catch(() => {}); } catch (e) {}
+            };
+
+            // 読み札の音声読み上げ（Web Speech API・ブラウザ標準。ミュート対応）
+            const speak = (text) => {
+                try {
+                    if (mutedRef.current || !text) return;
+                    if (!('speechSynthesis' in window)) return;
+                    window.speechSynthesis.cancel();
+                    const u = new SpeechSynthesisUtterance(text);
+                    u.lang = 'ja-JP';
+                    u.rate = 0.95;
+                    u.volume = VOLUME.VOICE;
+                    const jv = window.speechSynthesis.getVoices().find(v => (v.lang || '').toLowerCase().startsWith('ja'));
+                    if (jv) u.voice = jv;
+                    // 読み上げの開始／終了に合わせてBGMを絞る・戻す
+                    u.onstart = () => setDucking(true);
+                    u.onend = () => setDucking(false);
+                    u.onerror = () => setDucking(false);
+                    window.speechSynthesis.speak(u);
+                } catch (e) { setDucking(false); console.log('TTS error', e); }
+            };
+
+            useEffect(() => {
+                bgmRef.current.loop = true;
+                applyBgmVolume();
+                seGetRef.current.volume = VOLUME.SE;
+                seMissRef.current.volume = VOLUME.SE;
+                seOpponentRef.current.volume = VOLUME.SE;
+                seReadyRef.current.volume = VOLUME.SE;
+
+                if (view === 'game' && !muted) {
+                    bgmRef.current.play().catch(() => console.log("BGM autoplay blocked"));
+                } else {
+                    bgmRef.current.pause();
+                    if (view !== 'game') bgmRef.current.currentTime = 0;
+                }
+                // ミュート時／ゲーム外では読み上げも止める（cancel は onend が発火しない場合があるので明示的に戻す）
+                if (muted || view !== 'game') {
+                    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+                    setDucking(false);
+                }
+                return () => {
+                    if (view !== 'game') {
+                        bgmRef.current.pause();
+                        bgmRef.current.currentTime = 0;
+                    }
+                };
+            }, [view, muted]);
+
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    if (!user) setLongLoading(true);
+                }, 10000);
+
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    if (u) {
+                        setUser(u);
+                        const savedName = localStorage.getItem('karuta_player_name');
+                        if (savedName) setPlayerName(savedName);
+                    } else {
+                        auth.signInAnonymously()
+                            .then(() => console.log("Signed in anonymously"))
+                            .catch(e => {
+                                console.error("Auth Error", e);
+                                showError("ログインエラー", e.message + "\n\nFirebase Authenticationで「匿名ログイン」が有効になっているか確認してください。");
+                            });
+                    }
+                });
+                return () => {
+                    unsubscribe();
+                    clearTimeout(timer);
+                };
+            }, []);
+
+            // 取り札画像URLの事前取得（ログイン後に一度だけ）
+            useEffect(() => {
+                if (!user) return;
+                let cancelled = false;
+                fetchTorifudaImageUrls()
+                    .then((urls) => { if (!cancelled) setCardImages(urls); })
+                    .catch((e) => console.warn("取り札画像のプリロードに失敗", e));
+                return () => { cancelled = true; };
+            }, [user]);
+
+            useEffect(() => {
+                if (!user || !room?.roomId) return;
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+
+                const unsubscribe = roomRef.onSnapshot((snapshot) => {
+                    if (snapshot.exists) {
+                        const roomData = snapshot.data();
+
+                        if (roomData.createdAt) {
+                            const created = roomData.createdAt.toMillis ? roomData.createdAt.toMillis() : roomData.createdAt;
+                            if (Date.now() - created > 30 * 60 * 1000) {
+                                setErrorMsg("ルームの有効期限（30分）が経過したため解散しました。");
+                                setRoom(null);
+                                setView('landing');
+                                return;
+                            }
+                        }
+
+                        setRoom(roomData);
+                        if (roomData.status === 'playing' && view !== 'game') setView('game');
+                        if (roomData.status === 'finished' && view !== 'result') setView('result');
+                        if (roomData.status === 'waiting' && view !== 'lobby') {
+                            setView('lobby');
+                            setIsResetting(false);
+                        }
+                    } else {
+                        setRoom(null);
+                        setView('landing');
+                        setErrorMsg('ルームが存在しないか、解散されました。');
+                    }
+                }, (error) => {
+                    console.error("Room sync error:", error);
+                    showError("通信エラー", "データベースとの通信に失敗しました。\n" + error.message);
+                });
+                return () => unsubscribe();
+            }, [user, room?.roomId]);
+
+            useEffect(() => {
+                if (!room?.gameState?.lastWinnerId) return;
+                if (room.gameState.lastWinnerId !== user.uid) {
+                    // 相手が取った瞬間の効果音（読み上げは余韻として最後まで流す＝次の札で自動的に止まる）
+                    playSE(seOpponentRef);
+                }
+            }, [room?.gameState?.lastWinnerId]);
+
+            // 読み札アニメーション ＋ 音声読み上げ
+            useEffect(() => {
+                if (view !== 'game' || !room?.gameState) return;
+                if (introCountdown !== null) return; // 開始カウントダウン中は読み上げない
+
+                const currentCardId = room.gameState.currentReadingId;
+                if (!currentCardId) { setDisplayedYomi(''); return; }
+                const yomiText = KARUTA_DATA.find(k => k.id === currentCardId)?.yomi || '';
+
+                setDisplayedYomi('');
+                playSE(seReadyRef);
+
+                let interval = null;
+                const startTimeout = setTimeout(() => {
+                    speak(CARD_KANA[currentCardId] || yomiText); // 漢字は誤読するため、フリガナ由来のかなで読み上げる
+                    let i = 0;
+                    interval = setInterval(() => {
+                        i++;
+                        if (i <= yomiText.length) {
+                            setDisplayedYomi(yomiText.slice(0, i));
+                        } else {
+                            clearInterval(interval);
+                            interval = null;
+                        }
+                    }, 300);
+                }, 1000);
+
+                // 【修正】以前は clearInterval が setTimeout コールバックの戻り値になっていて
+                // effect のクリーンアップとして機能せず、札が変わると旧 interval が生き残って
+                // 文字がチラついていた。interval を effect スコープに持ち上げて確実に停止する。
+                return () => {
+                    clearTimeout(startTimeout);
+                    if (interval) clearInterval(interval);
+                    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+                    setDucking(false); // 札が切り替わってもBGMが絞られたままにならないように
+                };
+            }, [room?.gameState?.currentReadingId, view, introCountdown]);
+
+            useEffect(() => {
+                if (!room || !room.gameState || !room.gameState.resumeAt) {
+                    setCountdown(null);
+                    return;
+                }
+                const interval = setInterval(() => {
+                    const now = Date.now();
+                    const diff = Math.ceil((room.gameState.resumeAt - now) / 1000);
+                    if (diff <= 0) {
+                        setCountdown(0);
+                        if (room.hostId === user.uid && room.gameState.bannedPlayerIds.length > 0) {
+                            const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                            roomRef.update({ "gameState.bannedPlayerIds": [], "gameState.resumeAt": null }).catch(console.error);
+                        }
+                    } else {
+                        setCountdown(diff);
+                    }
+                }, 200);
+                return () => clearInterval(interval);
+            }, [room?.gameState?.resumeAt, user?.uid]);
+
+            // 次ターンへの自動進行（ホストが監視して進める）。
+            // 以前は「取った本人の端末の setTimeout」だけが進行させていたため、
+            // 勝者がその数秒間にタブを閉じる/通信断でゲームが永久停止する単一障害点だった。
+            // gameState.advanceAt（進行予定時刻）を Firestore に持たせ、ホストが進めることで、
+            // 誰の端末が落ちても止まらないようにする。
+            useEffect(() => {
+                if (!user || !room?.gameState?.advanceAt) return;
+                if (room.hostId !== user.uid) return; // 進行役はホストのみ
+                const delay = Math.max(0, room.gameState.advanceAt - Date.now());
+                const deck = room.gameState.deck;
+                const nextIndex = room.gameState.currentCardIndex + 1;
+                const roomId = room.roomId;
+                const t = setTimeout(() => { nextTurn(roomId, deck, nextIndex); }, delay);
+                return () => clearTimeout(t);
+            }, [room?.gameState?.advanceAt, room?.hostId, user?.uid]);
+
+            // 開始カウントダウン（ゲーム開始時に一度だけ 3・2・1・はじめ！）
+            useEffect(() => {
+                if (view !== 'game') { introDoneRef.current = false; setIntroCountdown(null); return; }
+                if (introDoneRef.current) return;
+                if (!room?.gameState || room.gameState.currentCardIndex !== 0) return;
+                introDoneRef.current = true;
+                let n = 3;
+                setIntroCountdown(n);
+                const iv = setInterval(() => {
+                    n -= 1;
+                    if (n < 0) { clearInterval(iv); setIntroCountdown(null); }
+                    else setIntroCountdown(n); // 0 は「はじめ！」表示
+                }, 800);
+                return () => clearInterval(iv);
+            }, [view, room?.gameState?.currentCardIndex]);
+
+            // タブを閉じた/離れた時のベストエフォート退出（無言離脱で相手を待たせない）
+            useEffect(() => {
+                if (!user || !room?.roomId) return;
+                const handler = () => { try { leaveRoom(); } catch (e) {} };
+                window.addEventListener('pagehide', handler);
+                window.addEventListener('beforeunload', handler);
+                return () => {
+                    window.removeEventListener('pagehide', handler);
+                    window.removeEventListener('beforeunload', handler);
+                };
+            }, [user, room?.roomId]);
+
+            const joinOrCreateRoom = async (inputRoomId = null, isRandom = false) => {
+                if (!playerName.trim()) { setErrorMsg('名前を入力してください'); return; }
+                localStorage.setItem('karuta_player_name', playerName);
+                setErrorMsg('');
+                try {
+                    let targetRoomId = inputRoomId;
+                    const roomsCollection = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms');
+
+                    if (isRandom) {
+                        const q = roomsCollection.where("status", "==", "waiting").where("type", "==", "random");
+                        const querySnapshot = await q.get();
+
+                        let validRoomId = null;
+                        if (!querySnapshot.empty) {
+                            for (const doc of querySnapshot.docs) {
+                                const data = doc.data();
+                                const created = data.createdAt.toMillis ? data.createdAt.toMillis() : data.createdAt;
+                                const players = data.players || [];
+                                if (Date.now() - created <= 30 * 60 * 1000 && players.length < 2) {
+                                    validRoomId = doc.id;
+                                    break;
+                                }
+                            }
+                        }
+                        targetRoomId = validRoomId || Math.random().toString(36).substring(2, 8);
+                    } else if (!targetRoomId) {
+                        targetRoomId = Math.random().toString(36).substring(2, 8);
+                    }
+                    const roomRef = roomsCollection.doc(targetRoomId);
+
+                    await db.runTransaction(async (transaction) => {
+                        const roomDoc = await transaction.get(roomRef);
+                        if (!roomDoc.exists) {
+                            transaction.set(roomRef, {
+                                roomId: targetRoomId, status: 'waiting', hostId: user.uid, type: isRandom ? 'random' : 'private',
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                settings: { cardCount: 20 }, players: [{ uid: user.uid, name: playerName, score: 0, joinedAt: Date.now() }],
+                                gameState: { deck: [], boardCards: [], currentCardIndex: null, readStartTime: null, correctCardId: null, bannedPlayerIds: [], resumeAt: null }
+                            });
+                        } else {
+                            const data = roomDoc.data();
+                            if (data.status !== 'waiting') throw new Error("ゲームは既に進行中です");
+                            const created = data.createdAt.toMillis ? data.createdAt.toMillis() : data.createdAt;
+                            if (Date.now() - created > 30 * 60 * 1000) throw new Error("このルームは有効期限切れです");
+
+                            const players = data.players || [];
+                            if (!players.some(p => p.uid === user.uid)) {
+                                const newPlayers = [...players, { uid: user.uid, name: playerName, score: 0, joinedAt: Date.now() }];
+                                transaction.update(roomRef, { players: newPlayers });
+
+                                if (isRandom && newPlayers.length === 2) {
+                                    const cardCount = Math.min(data.settings?.cardCount || 20, 50);
+                                    const shuffledCards = shuffleArray(KARUTA_DATA).slice(0, cardCount);
+                                    const boardCardIds = shuffledCards.map(c => c.id);
+                                    const deck = shuffleArray([...boardCardIds]);
+
+                                    transaction.update(roomRef, {
+                                        status: 'playing',
+                                        players: newPlayers.map(p => ({ ...p, score: 0 })),
+                                        gameState: {
+                                            deck: deck,
+                                            boardCards: boardCardIds,
+                                            currentCardIndex: 0,
+                                            currentReadingId: deck[0],
+                                            readStartTime: Date.now(),
+                                            lastWinnerId: null,
+                                            bannedPlayerIds: [],
+                                            resumeAt: null,
+                                            advanceAt: null
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    });
+                    setRoom({ roomId: targetRoomId, type: isRandom ? 'random' : 'private' });
+                } catch (err) {
+                    console.error(err);
+                    setErrorMsg(err.message || "ルームへの参加に失敗しました");
+                    showError("参加エラー", err.message);
+                }
+            };
+
+            const updateSettings = async (newSettings) => {
+                if (!room || room.hostId !== user.uid) return;
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                await roomRef.update({ settings: { ...room.settings, ...newSettings } });
+            };
+            const transferHost = async (newHostId) => {
+                if (!room || room.hostId !== user.uid) return;
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                await roomRef.update({ hostId: newHostId });
+            };
+            const startGame = async () => {
+                if (!room || room.hostId !== user.uid) return;
+                const cardCount = Math.min(room.settings.cardCount || 20, 50);
+                const shuffledCards = shuffleArray(KARUTA_DATA).slice(0, cardCount);
+                const boardCardIds = shuffledCards.map(c => c.id);
+                const deck = shuffleArray([...boardCardIds]);
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                const resetPlayers = room.players.map(p => ({ ...p, score: 0 }));
+
+                await roomRef.update({
+                    status: 'playing', players: resetPlayers,
+                    gameState: {
+                        deck: deck,
+                        boardCards: boardCardIds,
+                        currentCardIndex: 0,
+                        currentReadingId: deck[0],
+                        readStartTime: Date.now(),
+                        lastWinnerId: null,
+                        bannedPlayerIds: [],
+                        resumeAt: null,
+                        advanceAt: null
+                    }
+                });
+            };
+            const nextTurn = async (roomId, deck, nextIndex) => {
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(roomId);
+                if (nextIndex >= deck.length) { await roomRef.update({ status: 'finished', "gameState.advanceAt": null }); return; }
+                const nextCardId = deck[nextIndex];
+                await roomRef.update({
+                    "gameState.currentCardIndex": nextIndex,
+                    "gameState.currentReadingId": nextCardId,
+                    "gameState.readStartTime": Date.now(),
+                    "gameState.lastWinnerId": null,
+                    "gameState.bannedPlayerIds": [],
+                    "gameState.resumeAt": null,
+                    "gameState.advanceAt": null
+                });
+            };
+            const handleCardClick = async (cardId) => {
+                if (!room || room.status !== 'playing') return;
+                if (introCountdown !== null) return; // 開始カウントダウン中は取れない
+                const { gameState } = room;
+                if (gameState.lastWinnerId) return; // 既に取られた札の待機中は無効
+                if (gameState.resumeAt || (gameState.bannedPlayerIds && gameState.bannedPlayerIds.includes(user.uid))) return;
+
+                if (gameState.currentReadingId !== cardId) {
+                    playSE(seMissRef);
+                }
+
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                try {
+                    await db.runTransaction(async (transaction) => {
+                        const sfDoc = await transaction.get(roomRef);
+                        if (!sfDoc.exists) throw "Room does not exist!";
+                        const data = sfDoc.data();
+                        const currentBoard = data.gameState.boardCards;
+                        const currentBans = data.gameState.bannedPlayerIds || [];
+                        if (data.gameState.resumeAt) throw "Game paused";
+                        if (currentBans.includes(user.uid)) throw "You are banned";
+                        if (data.gameState.currentReadingId !== cardId) {
+                            const newBans = [...currentBans, user.uid];
+                            const updates = { "gameState.bannedPlayerIds": newBans };
+                            if (newBans.length >= data.players.length) updates["gameState.resumeAt"] = Date.now() + 4000;
+                            transaction.update(roomRef, updates);
+                            return;
+                        }
+                        if (!currentBoard.includes(cardId)) throw "Card already taken";
+                        const newBoard = currentBoard.filter(id => id !== cardId);
+                        const players = data.players.map(p => p.uid === user.uid ? { ...p, score: p.score + 1 } : p);
+
+                        // 次ターンへ進む予定時刻を Firestore に記録（進行はホストが担当）。
+                        // 「読み上げ完了までの推定時間」と「取得後の余韻(3秒)」の長い方を採用し、
+                        // 途中で取られても読み上げが最後まで流れてから次へ進むようにする。
+                        const yomi = KARUTA_DATA.find(k => k.id === cardId)?.yomi || "";
+                        const readingDuration = 1000 + (yomi.length * 300);
+                        const timeSinceStart = Date.now() - data.gameState.readStartTime;
+                        const remainingReadingTime = Math.max(0, readingDuration - timeSinceStart);
+                        const waitTime = Math.max(3000, remainingReadingTime + 1000);
+
+                        transaction.update(roomRef, {
+                            "gameState.boardCards": newBoard,
+                            "gameState.lastWinnerId": user.uid,
+                            "players": players,
+                            "gameState.advanceAt": Date.now() + waitTime
+                        });
+                    });
+
+                    // 自分が正解の札を取れた場合の効果音（進行は advanceAt を見てホストが行う）
+                    if (gameState.currentReadingId === cardId) {
+                        playSE(seGetRef);
+                    }
+                } catch (e) { console.log("Action failed:", e); }
+            };
+            const leaveRoom = async () => {
+                setShowConfirmModal(false);
+                if (!room) return;
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+
+                setRoom(null);
+                setView('landing');
+
+                try {
+                    await db.runTransaction(async (transaction) => {
+                        const doc = await transaction.get(roomRef);
+                        if (!doc.exists) return;
+
+                        const data = doc.data();
+                        const newPlayers = data.players.filter(p => p.uid !== user.uid);
+
+                        if (newPlayers.length === 0 || (data.type === 'private' && data.hostId === user.uid)) {
+                            transaction.delete(roomRef);
+                        } else {
+                            let updates = { players: newPlayers };
+                            if (data.hostId === user.uid) {
+                                updates.hostId = newPlayers[0].uid;
+                            }
+                            transaction.update(roomRef, updates);
+                        }
+                    });
+                } catch (error) {
+                    console.error("Error leaving room:", error);
+                }
+            };
+            const returnToLobby = async () => {
+                setShowConfirmModal(false);
+                if (!room || room.hostId !== user.uid) return;
+                const roomRef = db.collection('artifacts').doc(APP_ID).collection('public').doc('data').collection('rooms').doc(room.roomId);
+                await roomRef.update({ status: 'waiting' });
+            };
+
+            if (!user) return <LoadingScreen message={longLoading ? "接続に時間がかかっています。\nFirebase設定やネットワーク環境を確認してください。\n画面上部にエラーが表示されていないかも確認してください。" : null} />;
+
+            if (view === 'landing') {
+                return (
+                    <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4">
+                        <div className="max-w-md w-full bg-white rounded-xl shadow-xl overflow-hidden">
+                            <div className="bg-red-600 p-6 text-center"><h1 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: '"Noto Serif JP", serif' }}>キズナかるた</h1><p className="text-red-100 text-sm">オンライン対戦</p></div>
+                            <div className="p-8 space-y-6">
+                                <div><label className="block text-sm font-medium text-stone-700 mb-2">プレイヤー名</label><input type="text" value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="名前を入力" className="w-full p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition" /></div>
+                                <div className="grid gap-4">
+                                    <button onClick={() => joinOrCreateRoom(null, true)} className="flex items-center justify-center gap-2 w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition shadow-md active:transform active:scale-95"><Icon path={Icons.Shuffle} size={20} /> ランダムマッチに参加</button>
+                                    <div className="relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-200"></div></div><div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-stone-500">または</span></div></div>
+                                    <div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3.5 text-stone-400"><Icon path={Icons.Hash} size={18} /></div><input id="room-code" type="text" placeholder="ルームID" className="w-full pl-10 p-3 border border-stone-300 rounded-lg focus:ring-2 focus:ring-stone-500 outline-none" /></div><button onClick={() => joinOrCreateRoom(document.getElementById('room-code').value, false)} className="bg-stone-800 hover:bg-stone-900 text-white px-6 rounded-lg font-bold transition">入室</button></div>
+                                </div>
+                                {errorMsg && <p className="text-red-500 text-center text-sm bg-red-50 p-2 rounded">{errorMsg}</p>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            if (view === 'lobby' && room) {
+                if (!room.players) return <LoadingScreen />;
+                const isHost = room.hostId === user.uid;
+
+                if (room.type === 'random' && room.players.length < 2) {
+                    return (
+                        <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4">
+                            <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full text-center">
+                                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse"><Icon path={Icons.Users} size={32} /></div>
+                                <h2 className="text-2xl font-bold text-stone-800 mb-2">対戦相手を探しています</h2>
+                                <p className="text-stone-500 mb-8">しばらくお待ちください...</p>
+                                <button onClick={leaveRoom} className="w-full py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-lg transition">キャンセル</button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="min-h-screen bg-stone-100 flex flex-col items-center p-4">
+                        <header className="w-full max-w-2xl bg-white shadow-sm rounded-lg p-4 mb-6 flex justify-between items-center"><div><span className="text-xs text-stone-500 font-bold tracking-wider">ROOM ID</span><h2 className="text-2xl font-mono font-bold text-stone-800">{room.roomId}</h2></div><button onClick={leaveRoom} className="flex items-center gap-1 bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-2 rounded-lg transition font-bold text-sm"><Icon path={Icons.Home} size={18} /> ホームへ</button></header>
+                        <div className="w-full max-w-2xl grid gap-6 md:grid-cols-2">
+                            <div className="bg-white rounded-xl shadow p-6"><h3 className="flex items-center gap-2 font-bold text-stone-700 mb-4 pb-2 border-b"><Icon path={Icons.Users} size={18} /> 参加者 ({room.players.length})</h3><ul className="space-y-3">{room.players.map(p => (<li key={p.uid} className="flex items-center justify-between p-2 bg-stone-50 rounded-lg"><div className="flex items-center gap-2">{p.uid === room.hostId ? <span className="text-yellow-500"><Icon path={Icons.Crown} size={16} className="fill-current" /></span> : <span className="text-stone-400"><Icon path={Icons.User} size={16} /></span>}<span className={p.uid === user.uid ? "font-bold" : ""}>{p.name}</span></div>{isHost && p.uid !== user.uid && <button onClick={() => transferHost(p.uid)} className="text-xs bg-stone-200 hover:bg-stone-300 px-2 py-1 rounded text-stone-600">親を譲る</button>}</li>))}</ul></div>
+                            <div className="bg-white rounded-xl shadow p-6 flex flex-col justify-between"><div><h3 className="flex items-center gap-2 font-bold text-stone-700 mb-4 pb-2 border-b"><Icon path={Icons.Settings} size={18} /> 設定</h3><div className="mb-4"><label className="block text-sm text-stone-500 mb-1">使用する札の枚数</label>{isHost ? (<div className="flex items-center gap-4"><input type="range" min="5" max="50" step="5" value={room.settings?.cardCount || 20} onChange={(e) => updateSettings({ cardCount: parseInt(e.target.value) })} className="flex-1 h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-red-600" /><span className="text-xl font-bold w-12 text-center">{room.settings?.cardCount || 20}</span></div>) : (<div className="text-xl font-bold text-stone-800">{room.settings?.cardCount || 20}枚</div>)}</div>
+                                <div className="mb-2">
+                                    <label className="block text-sm text-stone-500 mb-2">札の大きさ <span className="text-xs text-stone-400">（自分の画面のみ／ゲーム中も変更できます）</span></label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {CARD_SIZE_ORDER.map(k => (
+                                            <button key={k} onClick={() => chooseCardSize(k)} className={`rounded-lg overflow-hidden border-2 transition ${cardSize === k ? 'border-red-600 ring-2 ring-red-200' : 'border-stone-200 hover:border-stone-400'}`}>
+                                                <CardSizePreview sizeKey={k} images={cardImages} />
+                                                <div className={`text-xs font-bold py-1 ${cardSize === k ? 'bg-red-600 text-white' : 'bg-stone-100 text-stone-500'}`}>{CARD_SIZES[k].label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>{isHost ? <button onClick={startGame} className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-bold shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2"><Icon path={Icons.Play} size={20} className="fill-current" /> ゲーム開始</button> : <div className="text-center py-4 text-stone-500 bg-stone-50 rounded-lg animate-pulse">ホストが開始するのを待っています...</div>}</div>
+                        </div>
+                    </div>
+                );
+            }
+            if (view === 'game' && room) {
+                if (!room.gameState || !room.players) return <LoadingScreen />;
+                const { gameState, players } = room;
+                const isIntro = introCountdown !== null;
+                const isWaitingNext = !gameState.currentReadingId || gameState.lastWinnerId;
+                const isBanned = gameState.bannedPlayerIds?.includes(user.uid);
+                const isAllBanned = gameState.resumeAt != null;
+                const takenCard = gameState.lastWinnerId ? KARUTA_DATA.find(k => k.id === gameState.currentReadingId) : null;
+                const sortedPlayers = [...players].sort((a,b) => b.score - a.score);
+                const lastWinnerName = gameState.lastWinnerId ? players.find(p => p.uid === gameState.lastWinnerId)?.name : null;
+                const isHost = room.hostId === user.uid;
+                const sz = CARD_SIZES[cardSize] || CARD_SIZES.m;
+                return (
+                    <div className="app-screen bg-stone-800 flex flex-col relative overflow-hidden">
+                        {showConfirmModal && <ConfirmModal title={isHost ? "ゲームを中断して待機室に戻りますか？" : "ゲームから退出してホームに戻りますか？"} onCancel={() => setShowConfirmModal(false)} onConfirm={isHost ? () => { leaveRoom(); } : leaveRoom} />}
+                        {lastWinnerName && <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4"><div className="bg-white/95 backdrop-blur-sm p-6 md:p-8 rounded-2xl shadow-2xl animate-in zoom-in duration-300 flex flex-col items-center max-w-xs w-full">{takenCard && cardImages[takenCard.id] ? <img src={cardImages[takenCard.id]} alt="取られた札" className="w-24 h-36 object-cover shadow-lg mb-4 animate-in zoom-in duration-300" /> : <span className="text-yellow-500 mb-4"><Icon path={Icons.Trophy} size={64} /></span>}<div className="flex items-center gap-2 mb-1"><span className="text-yellow-500"><Icon path={Icons.Trophy} size={24} /></span><h2 className="text-2xl md:text-4xl font-bold text-stone-900">{lastWinnerName}</h2></div><p className="text-base text-stone-500 font-bold">が取りました！</p></div></div>}
+                        {isIntro && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"><div key={introCountdown} className="text-7xl md:text-9xl font-black text-white drop-shadow-lg animate-in zoom-in duration-300">{introCountdown > 0 ? introCountdown : "はじめ！"}</div></div>}
+                        {isAllBanned && countdown !== null && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in"><div className="text-center"><p className="text-white font-bold text-xl mb-4 bg-red-600 px-6 py-2 rounded-full animate-pulse">全員お手つき！</p><div className="text-9xl font-black text-white drop-shadow-md scale-150">{countdown > 0 ? countdown : "GO!"}</div><p className="text-white/80 mt-4">まもなく再開します</p></div></div>}
+                        {isBanned && !lastWinnerName && !isAllBanned && <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none"><div className="bg-sky-500/90 backdrop-blur-sm text-white p-8 rounded-2xl shadow-xl flex flex-col items-center animate-in fade-in zoom-in duration-300"><span className="mb-4 text-white"><Icon path={Icons.Coffee} size={56} /></span><span className="text-2xl font-bold mb-1">お手つき</span><span className="text-sky-100">一回休み...</span></div></div>}
+                        {/* ヘッダー：スクロールしても常に見えるよう固定領域にする（shrink-0） */}
+                        <div className="bg-white px-3 pt-2.5 pb-2 shadow-lg z-30 relative shrink-0">
+                            <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600"></div>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] md:text-xs font-bold text-stone-400 tracking-wider shrink-0">残り {gameState.boardCards.length}枚</span>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={cycleCardSize} title="札の大きさを変える" className="w-8 h-8 flex items-center justify-center text-xs font-bold text-stone-500 hover:text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-full transition">{CARD_SIZES[cardSize].label}</button>
+                                    <button onClick={() => setMuted(m => !m)} title={muted ? "ミュート解除" : "ミュート"} className="w-8 h-8 flex items-center justify-center text-stone-500 hover:text-stone-800 bg-stone-100 hover:bg-stone-200 rounded-full transition"><Icon path={muted ? Icons.VolumeX : Icons.Volume2} size={16} /></button>
+                                    <button onClick={() => setShowConfirmModal(true)} title="退出" className="w-8 h-8 flex items-center justify-center text-stone-400 hover:text-red-600 bg-stone-100 hover:bg-red-50 rounded-full transition"><Icon path={Icons.LogOut} size={16} /></button>
+                                </div>
+                            </div>
+                            {/* 高さを予約しておき、文字送りで盤面が上下にずれないようにする */}
+                            <h2 className="max-w-4xl mx-auto text-center min-h-[2.75rem] md:min-h-[3.25rem] flex items-center justify-center text-base md:text-2xl font-bold text-stone-900 leading-snug" style={{ fontFamily: '"Noto Serif JP", serif' }}>{displayedYomi}</h2>
+                        </div>
+                        {/* 盤面：ここだけが内部スクロールする（min-h-0 が無いと flex 子要素が縮まずページ全体が伸びる） */}
+                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-4">
+                            <div className="max-w-5xl mx-auto"><div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${sz.min}px, 1fr))`, gap: `${sz.gap}px`, alignContent: 'start' }}>{gameState.boardCards.map(cardId => { const cardData = KARUTA_DATA.find(k => k.id === cardId); return (<button key={cardId} onClick={() => handleCardClick(cardId)} disabled={isWaitingNext || isBanned || isAllBanned || isIntro} className={`relative w-full aspect-[2/3] flex items-center justify-center overflow-hidden p-0 transition-all duration-200 ${(isWaitingNext || isBanned || isAllBanned || isIntro) ? 'opacity-50 cursor-not-allowed scale-95 grayscale' : 'hover:-translate-y-1 cursor-pointer active:scale-95'}`}><TorifudaFace cardData={cardData} imageUrl={cardImages[cardId]} /></button>); })}</div></div>
+                        </div>
+                        {/* スコア：常に見えるよう最下部に固定（shrink-0） */}
+                        <div className="bg-stone-900 text-white px-3 py-2 safe-area-pb shrink-0"><div className="max-w-4xl mx-auto flex gap-2 overflow-x-auto scrollbar-hide">{sortedPlayers.map((p, idx) => (<div key={p.uid} className={`flex items-center gap-2 px-3 py-1.5 rounded-full min-w-[118px] border ${p.uid === user.uid ? 'bg-stone-700 border-red-500 ring-1 ring-red-500' : 'bg-stone-800 border-stone-700'} ${gameState.bannedPlayerIds?.includes(p.uid) ? 'opacity-70 bg-stone-800/50' : ''} transition-all duration-300`}><span className="text-xs text-stone-400 font-bold truncate max-w-[80px]">{gameState.bannedPlayerIds?.includes(p.uid) && <span className="inline-block mr-1 text-sky-400"><Icon path={Icons.Coffee} size={12} /></span>}{idx+1}. {p.name}</span><span className="ml-auto text-lg font-bold text-yellow-400">{p.score}</span></div>))}</div></div>
+                    </div>
+                );
+            }
+            if (view === 'result' && room) {
+                if (!room.players) return <LoadingScreen />;
+                const sortedPlayers = [...room.players].sort((a,b) => b.score - a.score);
+                const isHost = room.hostId === user.uid;
+
+                return (
+                    <div className="min-h-screen bg-stone-800 flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                            <div className="bg-gradient-to-r from-red-600 to-red-500 p-8 text-center"><span className="inline-block mx-auto text-white drop-shadow-md mb-2"><Icon path={Icons.Trophy} size={48} /></span><h2 className="text-3xl font-black text-white drop-shadow-sm uppercase tracking-wider">結果発表</h2><p className="text-red-100 text-sm mt-2">対戦ありがとうございました！</p></div>
+                            <div className="p-6">
+                                <div className="space-y-4 mb-8 max-h-60 overflow-y-auto pr-2">{sortedPlayers.map((p, index) => (<div key={p.uid} className="flex items-center justify-between p-4 bg-stone-50 rounded-xl border border-stone-100"><div className="flex items-center gap-4"><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${index === 0 ? 'bg-yellow-400 shadow-md' : index === 1 ? 'bg-stone-400' : index === 2 ? 'bg-orange-400' : 'bg-stone-200 text-stone-500'}`}>{index + 1}</div><span className={`font-bold text-lg ${p.uid === user.uid ? 'text-red-600' : 'text-stone-800'}`}>{p.name}{p.uid === user.uid && <span className="text-xs ml-2 bg-red-100 text-red-600 px-2 py-0.5 rounded-full">YOU</span>}</span></div><span className="text-2xl font-bold text-stone-600">{p.score}<span className="text-sm font-normal ml-1">枚</span></span></div>))}</div>
+                                <div className="flex gap-3">
+                                    {isHost ? (
+                                        <>
+                                            <button onClick={leaveRoom} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-lg transition flex items-center justify-center gap-2">解散してホームへ <Icon path={Icons.LogOut} size={18} /></button>
+                                            <button
+                                                onClick={returnToLobby}
+                                                disabled={isResetting}
+                                                className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:bg-stone-400 text-white font-bold rounded-lg shadow-lg transition flex items-center justify-center gap-2"
+                                            >
+                                                {isResetting ? "処理中..." : "同じ部屋でもう一戦"} <Icon path={Icons.RotateCcw} size={18} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button onClick={leaveRoom} className="flex-1 py-3 text-stone-500 font-bold hover:bg-stone-100 rounded-lg transition">ホームへ戻る</button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
