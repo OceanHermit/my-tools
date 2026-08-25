@@ -4,11 +4,13 @@
 
 ## 公開URL
 
-| ツール | パス | 備考 |
+ベース: <https://oceanhermit.github.io/my-tools/>
+
+| ツール | URL | 備考 |
 |---|---|---|
-| マスターページ | `/` | 一覧 |
-| 教学でGo! | `/kyogaku-go/` | 単体で動作（外部依存は Google Fonts のみ） |
-| キズナかるた | `/kizuna-karuta/` | Firebase（Auth / Firestore / Storage）を利用 |
+| マスターページ | https://oceanhermit.github.io/my-tools/ | ツール一覧 |
+| 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
+| キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 
 ## ディレクトリ構成
 
@@ -42,5 +44,5 @@ git push
 ## 注意点
 
 - **キズナかるた**は Firebase を使うため、公開ドメインを Firebase コンソールの
-  「Authentication → Settings → 承認済みドメイン」に追加する必要がある。
+  「Authentication → Settings → 承認済みドメイン」に `oceanhermit.github.io` を追加する必要がある。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。
