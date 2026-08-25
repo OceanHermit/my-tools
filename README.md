@@ -43,6 +43,10 @@ git push
 
 ## 注意点
 
-- **キズナかるた**は Firebase を使うため、公開ドメインを Firebase コンソールの
-  「Authentication → Settings → 承認済みドメイン」に `oceanhermit.github.io` を追加する必要がある。
+- **キズナかるた**は Firebase の匿名認証を使用。公開ドメイン (`oceanhermit.github.io`) 上で
+  サインインが通ることを確認済み（匿名認証は「承認済みドメイン」の制約を受けないため設定不要）。
+- 一方で、匿名認証は誰でも uid を取得できる。第三者に触られたくないデータがある場合は
+  Firestore / Storage のセキュリティルールを確認すること。
+- リポジトリが Public のため Firebase の `apiKey` は公開されるが、これは Web 版 Firebase の
+  正常な仕様で秘密情報ではない。実質的な防御はセキュリティルール側で行う。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。
