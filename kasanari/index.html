@@ -216,6 +216,22 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .notice.wait{background:var(--field);color:var(--slate)}
 .notice.bad{background:var(--memo-bg);color:var(--memo-ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* ---- account row ---- */
+.acct{background:var(--paper);border-radius:var(--r);padding:12px 14px;margin:0 0 14px;
+  box-shadow:var(--card-shadow);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.acct .sub{font-size:12px;color:var(--slate);margin:0;flex:1 1 190px;min-width:0;line-height:1.55}
+.acct .me{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto}
+.acct .nm{font-size:14px;font-weight:700;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avatar{width:32px;height:32px;border-radius:999px;background:var(--pulse);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex:0 0 auto}
+/* Google のボタンはブランド指定に合わせて明色のまま固定する */
+.gbtn{display:flex;align-items:center;gap:9px;background:#FFFFFF;color:#1F1F1F;border:1px solid #DADCE0;
+  border-radius:999px;padding:9px 16px 9px 12px;font-size:13.5px;font-weight:700;flex:0 0 auto;
+  font-family:"Zen Kaku Gothic New",system-ui,sans-serif}
+.gbtn:active{background:#F1F3F4}
+.gbtn svg{width:18px;height:18px;flex:0 0 auto;display:block}
+.lnk{font-size:12.5px;color:var(--slate);text-decoration:underline;padding:6px 2px;flex:0 0 auto}
+.vmark{color:var(--pulse);font-weight:700;margin-left:1px;font-size:11px;vertical-align:.05em}
 </style>
 </head>
 <body>
@@ -255,8 +271,9 @@ const DOW = ['日','月','火','水','木','金','土'];
 const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 let S = { view:'home', ev:null, tab:'answer', draft:null, mine:[], calMonth:null };
-let FB = { state:'connecting', msg:'', uid:null, db:null, base:null };
+let FB = { state:'connecting', msg:'', uid:null, user:null, isAnon:true, db:null, base:null };
 let unsubEv = null, unsubResp = null;
+let lastUid = null;
 
 /* ---------- utils ---------- */
 const $ = s => document.querySelector(s);
@@ -325,31 +342,178 @@ function allWindows(ev){
   return a;
 }
 
-/* ---------- Firebase ---------- */
-async function connect(){
+/* ---------- Firebase / ログイン ---------- */
+const GLOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.2C12.4 13.5 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.7c-.3 2.1-1.6 5.3-4.7 7.4l7.7 5.9c4.6-4.2 7.4-10.4 7.4-17z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C1 16.5 0 20.1 0 24s1 7.5 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-5.9c-2.1 1.4-4.8 2.4-8.2 2.4-6.3 0-11.6-4-13.5-9.6l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>';
+
+function googleProvider(){
+  const p = new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({prompt:'select_account'});
+  return p;
+}
+const isDupCred = e => e && (e.code==='auth/credential-already-in-use'
+  || e.code==='auth/email-already-in-use' || e.code==='auth/account-exists-with-different-credential');
+
+function connect(){
+  return new Promise(resolve=>{
+    let settled=false;
+    const done=()=>{ if(!settled){ settled=true; resolve(); } };
+    if(typeof firebase === 'undefined'){ FB.state='error'; FB.msg=fbMessage({code:'no-sdk'}); render(); return done(); }
+    let auth;
+    try{
+      if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      FB.db = firebase.firestore();
+      FB.base = FB.db.collection('artifacts').doc(APP_ID).collection('public').doc('data');
+    }catch(e){ FB.state='error'; FB.msg=fbMessage(e); render(); return done(); }
+
+    // ポップアップが使えずリダイレクトで戻ってきた場合
+    if(auth.getRedirectResult){
+      auth.getRedirectResult()
+        .then(res=>{ if(res && res.user) toast('ログインしました'); })
+        .catch(e=>{ if(isDupCred(e)) takeOver(e.credential); else if(e && e.code) toast(fbMessage(e)); });
+    }
+
+    auth.onAuthStateChanged(user=>{
+      if(!user){
+        auth.signInAnonymously().catch(e=>{ FB.state='error'; FB.msg=fbMessage(e); render(); done(); });
+        return;
+      }
+      FB.user = user; FB.uid = user.uid; FB.isAnon = !!user.isAnonymous; FB.state = 'ready';
+      if(lastUid && lastUid!==user.uid) A = null;   // 別人になったら書きかけを持ち越さない
+      lastUid = user.uid;
+      render(); done();
+    }, err=>{ FB.state='error'; FB.msg=fbMessage(err); render(); done(); });
+  });
+}
+
+async function signIn(){
+  const auth = firebase.auth(), u = auth.currentUser;
   try{
-    if(typeof firebase === 'undefined') throw {code:'no-sdk', message:'Firebase SDK が読み込めませんでした'};
-    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const cred = await firebase.auth().signInAnonymously();
-    FB.uid = cred.user.uid;
-    FB.db = firebase.firestore();
-    FB.base = FB.db.collection('artifacts').doc(APP_ID).collection('public').doc('data');
-    FB.state = 'ready';
+    // 匿名のまま回答した人は「連携」で入る。uid が変わらないので回答はそのまま残る。
+    if(u && u.isAnonymous) await u.linkWithPopup(googleProvider());
+    else await auth.signInWithPopup(googleProvider());
+    await markProvider('google');
+    adoptAccountName();
+    toast('ログインしました'); render();
   }catch(e){
-    FB.state = 'error';
-    FB.msg = fbMessage(e);
+    const c = e && e.code;
+    if(isDupCred(e)) return takeOver(e.credential);
+    if(c==='auth/popup-closed-by-user' || c==='auth/cancelled-popup-request') return;
+    if(c==='auth/popup-blocked' || c==='auth/operation-not-supported-in-environment'){
+      try{
+        if(u && u.isAnonymous) await u.linkWithRedirect(googleProvider());
+        else await auth.signInWithRedirect(googleProvider());
+      }catch(e2){ toast(fbMessage(e2)); }
+      return;
+    }
+    toast(fbMessage(e));
   }
+}
+
+/* そのGoogleアカウントが既に別のuidで使われていた場合。
+   匿名側の回答をいったん引き上げてから入り直し、新しいuidで書き直す。
+   「自分の文書しか書けない」厳しめのルールでも通る順序にしてある。 */
+async function takeOver(cred){
+  if(!cred) return toast('ログインできませんでした');
+  const oldUid = FB.uid;
+  const codes = [];
+  if(S.ev && S.ev.code) codes.push(S.ev.code);
+  for(const m of S.mine) if(codes.indexOf(m.code)<0) codes.push(m.code);
+  const carry = [];
+  for(const code of codes.slice(0,20)){
+    try{
+      const ref = evRef(code).collection('responses').doc(oldUid);
+      const snap = await ref.get();
+      if(snap.exists){ carry.push({code, data:snap.data()}); await ref.delete(); }
+    }catch(e){}
+  }
+  let res;
+  try{
+    res = await firebase.auth().signInWithCredential(cred);
+  }catch(e){
+    // 入り直せなかったので、引き上げた回答を元に戻す
+    for(const c of carry){ try{ await evRef(c.code).collection('responses').doc(oldUid).set(c.data); }catch(e2){} }
+    return toast(fbMessage(e));
+  }
+  for(const c of carry){
+    try{ await evRef(c.code).collection('responses').doc(res.user.uid).set(Object.assign({}, c.data, {provider:'google'})); }catch(e){}
+  }
+  let stuck = 0;
+  for(const code of codes){
+    try{
+      const snap = await evRef(code).get();
+      if(snap.exists && snap.data().ownerUid===oldUid) await evRef(code).update({ownerUid:res.user.uid});
+    }catch(e){ stuck++; }
+  }
+  toast(stuck? 'ログインしました（一部の予定の管理は元の端末に残ります）' : 'ログインしました');
   render();
 }
+
+/* 連携でログインすると uid が変わらないぶん書きかけも残るので、
+   名前欄だけはアカウント名に寄せる。自分で打ち直した名前は触らない。 */
+function adoptAccountName(){
+  // onAuthStateChanged は非同期なので FB.* はまだ古いことがある。currentUser を直接見る。
+  const u = firebase.auth().currentUser;
+  if(!A || !u || u.isAnonymous || !u.displayName) return;
+  const posted = (S.ev && S.ev.responses) ? S.ev.responses.find(r=>r.id===u.uid) : null;
+  if(posted) return;
+  const auto = lget('name','');
+  if(A.name && A.name!==auto) return;
+  A.name = u.displayName;
+}
+
+/* 送信済みの回答にも、いまのログイン状態を反映しておく（✓表示を実態に合わせる） */
+async function markProvider(kind){
+  const u = firebase.auth().currentUser;
+  const uid = (u && u.uid) || FB.uid;
+  const codes = [];
+  if(S.ev && S.ev.code) codes.push(S.ev.code);
+  for(const m of S.mine) if(codes.indexOf(m.code)<0) codes.push(m.code);
+  for(const code of codes.slice(0,20)){
+    try{
+      const ref = evRef(code).collection('responses').doc(uid);
+      const snap = await ref.get();
+      if(snap.exists && snap.data().provider!==kind) await ref.update({provider:kind});
+    }catch(e){}
+  }
+}
+
+async function signOut(){
+  try{ await firebase.auth().signOut(); A=null; toast('ログアウトしました'); }
+  catch(e){ toast(fbMessage(e)); }
+}
+
 function fbMessage(e){
   const c = e && e.code;
   if(c==='no-sdk') return 'ネットワークにつながらず、保存の準備ができませんでした。通信状態を確かめて再読み込みしてください。';
   if(c==='permission-denied') return 'Firestore のルールで許可されていません（artifacts/'+APP_ID+'/public/data 以下への読み書きが必要です）。';
-  if(c==='auth/operation-not-allowed') return 'Firebase の匿名認証が有効になっていません。';
+  if(c==='auth/operation-not-allowed') return 'Firebase 側でこのログイン方法が有効になっていません。';
+  if(c==='auth/unauthorized-domain') return 'このドメインが Firebase の「承認済みドメイン」に入っていません（oceanhermit.github.io を追加してください）。';
   if(c==='unavailable' || c==='auth/network-request-failed') return '通信が届きませんでした。電波やネットワークを確かめて、もう一度お試しください。';
   return '保存の準備ができませんでした（' + (c || 'unknown') + '）。';
 }
 const evRef = code => FB.base.collection('events').doc(code);
+
+/* ---------- アカウント表示 ---------- */
+function acctHTML(){
+  if(FB.state!=='ready') return '';
+  if(FB.isAnon){
+    return `<div class="acct">
+      <p class="sub">ログインしておくと、スマホとPCなど別の端末からでも自分の回答や予定を直せます。しなくてもこのまま使えます。</p>
+      <button class="gbtn" id="gin">${GLOGO}<span>Google でログイン</span></button>
+    </div>`;
+  }
+  const name = (FB.user && (FB.user.displayName || FB.user.email)) || 'ログイン中';
+  return `<div class="acct">
+    <div class="me"><span class="avatar">${esc(name.trim().charAt(0))}</span>
+      <div style="min-width:0"><div class="nm">${esc(name)}</div><div class="sub">Google でログイン中</div></div></div>
+    <button class="lnk" id="gout">ログアウト</button>
+  </div>`;
+}
+function bindAcct(){
+  const i=$('#gin'); if(i) i.onclick = signIn;
+  const o=$('#gout'); if(o) o.onclick = signOut;
+}
 
 function detach(){
   if(unsubEv){ unsubEv(); unsubEv=null; }
@@ -369,7 +533,7 @@ function attach(code){
       const d = doc.data();
       let days = {};
       try{ days = JSON.parse(d.daysJson||'{}'); }catch(e){}
-      return { id:doc.id, name:d.name||'（名前なし）', updatedAt:d.updatedAt||0, days };
+      return { id:doc.id, name:d.name||'（名前なし）', updatedAt:d.updatedAt||0, provider:d.provider||'anon', days };
     }).sort((a,b)=> (a.updatedAt-b.updatedAt) || (a.id<b.id?-1:1));
     if(S.ev) S.ev.responses = rs;
     render();
@@ -382,6 +546,7 @@ function render(){
   if(v==='home') renderHome();
   else if(v==='create') renderCreate();
   else if(v==='event') renderEvent();
+  bindAcct();
 }
 function statusNotice(){
   if(FB.state==='connecting') return `<div class="notice wait">保存サーバーにつないでいます…</div>`;
@@ -392,7 +557,7 @@ const busy = () => FB.state!=='ready';
 
 /* --- home --- */
 function renderHome(){
-  $('#app').innerHTML = statusNotice() + `
+  $('#app').innerHTML = statusNotice() + acctHTML() + `
   <div class="card">
     <p class="eyebrow">はじめる</p>
     <button class="btn" id="go-create"${busy()?' disabled':''}>予定をつくる</button>
@@ -424,7 +589,7 @@ function blankDraft(){ return { title:'', dates:[], dayStart:9*60, dayEnd:22*60,
 /* --- create --- */
 function renderCreate(){
   const d = S.draft, cm = S.calMonth;
-  $('#app').innerHTML = statusNotice() + `
+  $('#app').innerHTML = statusNotice() + acctHTML() + `
   <div class="card">
     <p class="eyebrow">STEP 1 — なんの予定か</p>
     <label class="f">タイトル</label>
@@ -531,7 +696,7 @@ function openEvent(code){
 /* --- event --- */
 function renderEvent(){
   const ev = S.ev;
-  if(!ev || ev.loading){ $('#app').innerHTML = statusNotice() + `<div class="card"><div class="empty">読み込んでいます…</div></div>`; return; }
+  if(!ev || ev.loading){ $('#app').innerHTML = statusNotice() + acctHTML() + `<div class="card"><div class="empty">読み込んでいます…</div></div>`; return; }
   const owner = ev.ownerUid ? ev.ownerUid===FB.uid : S.mine.some(m=>m.code===ev.code);
   if(ev.closed && S.tab==='answer') S.tab='result';
   const head = `
@@ -558,7 +723,7 @@ function renderEvent(){
     <button data-tab="result" class="${S.tab==='result'?'on':''}">集計を見る</button>
   </div>`;
 
-  $('#app').innerHTML = statusNotice() + head + tabs + (S.tab==='answer'? answerHTML(ev) : resultHTML(ev)) +
+  $('#app').innerHTML = statusNotice() + acctHTML() + head + tabs + (S.tab==='answer'? answerHTML(ev) : resultHTML(ev)) +
     (owner? `<div class="card"><p class="eyebrow">管理</p>
       <button class="btn alt" id="tog">${ev.closed?'回答を再開する':'回答をしめきる'}</button></div>`:'') +
     `<button class="btn ghost" id="home">ホームにもどる</button>`;
@@ -587,7 +752,10 @@ function answerHTML(ev){
   if(ev.closed) return `<div class="card"><div class="empty">この予定は回答をしめきりました。<br>集計をご覧ください。</div></div>`;
   const mine = ev.responses.find(r=>r.id===FB.uid);
   if(!A || A.code!==ev.code){
-    A = { code:ev.code, name: mine? mine.name : lget('name',''), days:{} };
+    // 名前の既定値は「前に出した自分の回答 → ログイン中のアカウント名 → この端末で覚えた名前」の順。
+    // ログインしている人にまで、以前この端末で使った別人の名前を出さないようにする。
+    const gname = (!FB.isAnon && FB.user && FB.user.displayName) ? FB.user.displayName : '';
+    A = { code:ev.code, name: mine? mine.name : (gname || lget('name','')), days:{} };
     for(const d of ev.dates){
       const src = mine && mine.days[d];
       A.days[d] = src ? {mark:src.mark, bands:(src.bands||[]).map(b=>b.slice()), memo:src.memo||''}
@@ -665,7 +833,8 @@ async function submit(){
     days[d] = { mark:a.mark||'x', bands:(a.mark&&a.mark!=='x')? a.bands.map(b=>b.slice()):[], memo:(a.memo||'').trim() }; }
   try{
     await evRef(ev.code).collection('responses').doc(FB.uid).set({
-      name:A.name.trim(), updatedAt:Date.now(), daysJson:JSON.stringify(days)
+      name:A.name.trim(), updatedAt:Date.now(), daysJson:JSON.stringify(days),
+      provider: FB.isAnon ? 'anon' : 'google'
     });
     lset('name', A.name.trim());
     A=null; S.tab='result'; render(); toast('回答を送りました');
@@ -680,7 +849,7 @@ function resultHTML(ev){
   const total = ev.responses.length;
   if(!total) return `<div class="card"><div class="empty">まだ回答がありません。<br>リンクを共有してみてください。</div></div>`;
   const best = allWindows(ev).slice(0,5);
-  const names = ev.responses.map(r=>r.name);
+  const names = ev.responses.map(r=> esc(r.name) + (r.provider==='google'? '<span class="vmark" title="Googleログイン済み">✓</span>':''));
 
   const bestHTML = best.map((w,i)=>winHTML(ev,w,i===0)).join('') || '<div class="empty">全員が空く時間は見つかりませんでした。</div>';
 
@@ -708,7 +877,7 @@ function resultHTML(ev){
   return `<div class="card">
     <p class="eyebrow">いちばん重なる時間</p>
     ${bestHTML}
-    <p class="hint">${total}人が回答（${names.map(esc).join('、')}）</p>
+    <p class="hint">${total}人が回答（${names.join('、')}）</p>
   </div>
   <div class="card">
     <p class="eyebrow">日ごとの重なり</p>
