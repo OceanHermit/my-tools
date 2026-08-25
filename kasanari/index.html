@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>かさなり — 時間帯で決める日程調整</title>
+<meta name="description" content="候補日ごとに空いている時間帯を集めて、いちばん重なる時間を5分単位で割り出す日程調整ツール。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14182B;
+  --slate:#59627E;
+  --line:#D3D9E6;
+  --field:#EBEFF6;
+  --paper:#FFFFFF;
+  --pulse:#2F5BFF;
+  --maybe:#E8912B;
+  --none:#B9C0D1;
+  --bg:#E4E9F2;
+  --solid:#14182B;
+  --on-solid:#FFFFFF;
+  --sat:#2C63A8;
+  --sun:#B4453F;
+  --memo-bg:#FCF4E8;
+  --memo-ink:#7A5417;
+  --hour:rgba(255,255,255,.85);
+  --card-shadow:0 1px 0 rgba(20,24,43,.05),0 8px 24px -18px rgba(20,24,43,.5);
+  --toast-shadow:0 10px 30px -10px rgba(20,24,43,.7);
+  --r:14px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#E7EBF6;
+    --slate:#9AA4C0;
+    --line:#2C3350;
+    --field:#222840;
+    --paper:#161A2B;
+    --pulse:#6E8CFF;
+    --maybe:#F0A64A;
+    --none:#5A6382;
+    --bg:#0D1020;
+    --solid:#E7EBF6;
+    --on-solid:#12162A;
+    --sat:#7FB2E8;
+    --sun:#E8807A;
+    --memo-bg:#39301B;
+    --memo-ink:#F0DBAE;
+    --hour:rgba(13,16,32,.55);
+    --card-shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -18px rgba(0,0,0,.9);
+    --toast-shadow:0 10px 30px -10px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#E7EBF6;
+  --slate:#9AA4C0;
+  --line:#2C3350;
+  --field:#222840;
+  --paper:#161A2B;
+  --pulse:#6E8CFF;
+  --maybe:#F0A64A;
+  --none:#5A6382;
+  --bg:#0D1020;
+  --solid:#E7EBF6;
+  --on-solid:#12162A;
+  --sat:#7FB2E8;
+  --sun:#E8807A;
+  --memo-bg:#39301B;
+  --memo-ink:#F0DBAE;
+  --hour:rgba(13,16,32,.55);
+  --card-shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -18px rgba(0,0,0,.9);
+  --toast-shadow:0 10px 30px -10px rgba(0,0,0,.9);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit;margin:0}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"Zen Kaku Gothic New",system-ui,sans-serif;
+  font-size:15px;line-height:1.7;
+  padding:0 0 96px;
+}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+/* ---- header ---- */
+header{padding:22px 0 14px}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{
+  font-size:23px;font-weight:900;letter-spacing:.14em;margin:0;
+}
+.brand span{font-size:11px;letter-spacing:.18em;color:var(--slate)}
+.tagline{margin:4px 0 0;font-size:12.5px;color:var(--slate)}
+
+/* ---- signature: stacked bars in the logo ---- */
+.mark{display:flex;flex-direction:column;gap:2px;width:26px}
+.mark i{display:block;height:4px;border-radius:2px;background:var(--pulse)}
+.mark i:nth-child(1){opacity:.25;width:70%}
+.mark i:nth-child(2){opacity:.5;width:100%;margin-left:14%}
+.mark i:nth-child(3){opacity:.9;width:52%;margin-left:30%}
+
+/* ---- cards ---- */
+.card{background:var(--paper);border-radius:var(--r);padding:18px 16px;margin:0 0 14px;
+  box-shadow:var(--card-shadow)}
+.card h2{font-size:16px;font-weight:700;margin:0 0 12px;letter-spacing:.02em}
+.eyebrow{font-size:10.5px;letter-spacing:.2em;color:var(--slate);font-weight:600;margin:0 0 8px}
+.hint{font-size:12.5px;color:var(--slate);margin:6px 0 0}
+
+label.f{display:block;font-size:12px;font-weight:700;color:var(--slate);margin:14px 0 6px;letter-spacing:.04em}
+label.f:first-of-type{margin-top:0}
+input[type=text],select,textarea{
+  width:100%;font:inherit;color:var(--ink);background:var(--field);
+  border:1px solid transparent;border-radius:10px;padding:11px 12px;appearance:none;
+}
+::placeholder{color:var(--slate);opacity:.8}
+textarea{resize:vertical;min-height:56px}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--slate) 50%),linear-gradient(135deg,var(--slate) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 50%,calc(100% - 12px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:34px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--pulse);outline-offset:2px}
+
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+.btn{display:block;width:100%;background:var(--solid);color:var(--on-solid);border-radius:11px;
+  padding:14px;font-weight:700;letter-spacing:.04em;transition:transform .12s ease,opacity .12s}
+.btn:active{transform:scale(.985)}
+.btn.alt{background:var(--field);color:var(--ink)}
+.btn.ghost{background:none;color:var(--slate);font-size:13px;padding:10px;font-weight:500}
+.btn[disabled]{opacity:.4;cursor:default}
+.row{display:flex;gap:10px}
+.row>*{flex:1;min-width:0}
+
+/* ---- calendar ---- */
+.cal{margin-top:4px}
+.cal .mon{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}
+.cal .mon strong{font-size:14px;letter-spacing:.06em}
+.cal .nav{width:34px;height:34px;border-radius:9px;background:var(--field);font-size:15px;line-height:1;flex:0 0 auto}
+.grid7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.grid7 .dow{text-align:center;font-size:10.5px;color:var(--slate);padding:2px 0;letter-spacing:.06em}
+.day{aspect-ratio:1;border-radius:9px;background:var(--field);font-size:13.5px;display:flex;align-items:center;justify-content:center;
+  font-family:"IBM Plex Mono",monospace;color:var(--ink)}
+.day.out{background:none;color:transparent;pointer-events:none}
+.day.past{opacity:.32}
+.day.sat{color:var(--sat)}.day.sun{color:var(--sun)}
+.day.on{background:var(--solid);color:var(--on-solid)}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{background:var(--field);border-radius:999px;padding:5px 10px;font-size:12px;font-family:"IBM Plex Mono",monospace}
+.chip b{font-family:"Zen Kaku Gothic New",sans-serif;font-weight:500}
+
+/* ---- answer blocks ---- */
+.dayblock{border-top:1px solid var(--line);padding:16px 0 4px}
+.dayblock:first-of-type{border-top:0;padding-top:2px}
+.dhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.dhead .dt{font-size:15px;font-weight:700;letter-spacing:.03em}
+.dhead .dt em{font-style:normal;font-size:12px;color:var(--slate);margin-left:4px}
+.marks{display:flex;gap:6px;flex:0 0 auto}
+.mk{width:42px;height:38px;border-radius:10px;background:var(--field);font-size:17px;line-height:1;
+  display:flex;align-items:center;justify-content:center;color:var(--slate);font-weight:700}
+.mk.on[data-m=o]{background:var(--pulse);color:#fff}
+.mk.on[data-m=t]{background:var(--maybe);color:#fff}
+.mk.on[data-m=x]{background:var(--none);color:#fff}
+
+.band{display:flex;align-items:center;gap:7px;margin:0 0 7px}
+.band select{flex:1}
+.band .tilde{color:var(--slate);font-size:12px;flex:0 0 auto}
+.band .del{flex:0 0 auto;width:34px;height:36px;border-radius:9px;background:var(--field);color:var(--slate);font-size:16px}
+.addband{font-size:12.5px;color:var(--pulse);font-weight:700;padding:4px 0}
+
+/* ---- density track (signature) ---- */
+.track{margin:12px 0 0}
+.tlabels{display:flex;justify-content:space-between;font-size:10px;color:var(--slate);margin-bottom:3px}
+.tbar{display:flex;height:30px;border-radius:7px;overflow:hidden;background:var(--field)}
+.slot{flex:1;position:relative;min-width:0}
+.slot.hour{box-shadow:inset -1px 0 0 var(--hour)}
+.slot:last-child{box-shadow:none}
+.slot .fill{position:absolute;inset:0;background:var(--pulse)}
+.slot .mb{position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--maybe)}
+
+/* ---- results ---- */
+.win{border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin:0 0 9px;background:var(--paper)}
+.win.top{border-color:var(--ink);border-width:1.5px}
+.win .wtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.win .time{font-family:"IBM Plex Mono",monospace;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.win .date{font-size:12px;color:var(--slate);margin-right:6px}
+.tally{display:flex;gap:8px;font-size:12px;font-family:"IBM Plex Mono",monospace;flex:0 0 auto}
+.tally .o{color:var(--pulse);font-weight:600}
+.tally .t{color:var(--maybe);font-weight:600}
+.tally .x{color:var(--none)}
+.who{margin-top:8px;font-size:12.5px;color:var(--slate);display:flex;flex-wrap:wrap;gap:4px 8px}
+.who b{font-weight:500;color:var(--ink)}
+.memo{margin-top:7px;font-size:12.5px;background:var(--memo-bg);border-radius:9px;padding:8px 10px;color:var(--memo-ink)}
+.memo p{margin:0 0 3px}.memo p:last-child{margin:0}
+.free{font-size:11.5px;color:var(--slate);margin-top:5px}
+
+.codebox{display:flex;align-items:center;gap:10px;background:var(--solid);border-radius:12px;padding:14px 16px;color:var(--on-solid)}
+.codebox .cd{font-family:"IBM Plex Mono",monospace;font-size:22px;letter-spacing:.24em;font-weight:600}
+.codebox small{display:block;font-size:10.5px;letter-spacing:.16em;opacity:.6;margin-bottom:2px}
+
+.tabs{display:flex;gap:6px;margin:0 0 14px;background:var(--paper);padding:5px;border-radius:12px}
+.tabs button{flex:1;padding:10px;border-radius:9px;font-size:13.5px;font-weight:700;color:var(--slate)}
+.tabs button.on{background:var(--solid);color:var(--on-solid)}
+
+.empty{text-align:center;color:var(--slate);font-size:13px;padding:28px 10px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(120%);
+  background:var(--solid);color:var(--on-solid);padding:12px 20px;border-radius:999px;font-size:13.5px;font-weight:700;
+  transition:transform .3s cubic-bezier(.2,.9,.3,1.2);z-index:50;box-shadow:var(--toast-shadow);max-width:calc(100% - 32px);text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.mine{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.mine:first-child{border-top:0}
+.mine .t{font-size:14px;font-weight:700}
+.mine .c{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--slate);letter-spacing:.1em}
+.closedtag{display:inline-block;font-size:10.5px;letter-spacing:.12em;background:var(--field);color:var(--slate);padding:3px 8px;border-radius:999px;font-weight:700}
+.notice{border-radius:11px;padding:10px 12px;font-size:12.5px;margin:0 0 14px}
+.notice.wait{background:var(--field);color:var(--slate)}
+.notice.bad{background:var(--memo-bg);color:var(--memo-ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="mark"><i></i><i></i><i></i></div>
+      <h1>かさなり</h1>
+      <span>SCHEDULE OVERLAP</span>
+    </div>
+    <p class="tagline">「この時間の中でなら空いている」を集めて、重なりを探す</p>
+  </header>
+  <main id="app"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script>
+/* ============================================================
+   かさなり — 時間帯で決める日程調整
+   保存は Firebase（匿名認証 + Firestore）
+   パス: artifacts/kasanari/public/data/events/{CODE}
+         └ responses/{uid}
+   ============================================================ */
+const APP_ID = 'kasanari';
+const firebaseConfig = {
+  apiKey: "AIzaSyDNs1rwsKmY0MHbFhelmkm0J1AdALKsCPE",
+  authDomain: "karuta-game-c8fc8.firebaseapp.com",
+  projectId: "karuta-game-c8fc8",
+  storageBucket: "karuta-game-c8fc8.firebasestorage.app"
+};
+
+const SLOT = 5;
+const DOW = ['日','月','火','水','木','金','土'];
+const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+let S = { view:'home', ev:null, tab:'answer', draft:null, mine:[], calMonth:null };
+let FB = { state:'connecting', msg:'', uid:null, db:null, base:null };
+let unsubEv = null, unsubResp = null;
+
+/* ---------- utils ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const parseD = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const dlabel = s => { const d=parseD(s); return `${d.getMonth()+1}/${d.getDate()}<em>(${DOW[d.getDay()]})</em>`; };
+const dshort = s => { const d=parseD(s); return `${d.getMonth()+1}/${d.getDate()}(${DOW[d.getDay()]})`; };
+function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2600); }
+
+function lget(k,d){ try{ const v=localStorage.getItem('kasanari:'+k); return v==null? d : JSON.parse(v); }catch(e){ return d; } }
+function lset(k,v){ try{ localStorage.setItem('kasanari:'+k, JSON.stringify(v)); }catch(e){} }
+
+function durLabel(v){
+  const h=Math.floor(v/60), m=v%60;
+  return (h?`${h}時間`:'') + (m?`${m}分`:'') || '0分';
+}
+function newCode(){ let s=''; for(let i=0;i<6;i++) s+=ALPHA[Math.floor(Math.random()*ALPHA.length)]; return s; }
+function timeOptions(start,end,sel){
+  let h='';
+  for(let t=start;t<=end;t+=SLOT) h+=`<option value="${t}"${t===sel?' selected':''}>${fmt(t)}</option>`;
+  return h;
+}
+function shareURL(code){
+  return location.origin + location.pathname + '#' + code;
+}
+
+/* ---------- availability logic ---------- */
+function slotList(ev){ const o=[]; for(let t=ev.dayStart;t+SLOT<=ev.dayEnd;t+=SLOT) o.push(t); return o; }
+function statusAt(resp,date,t){
+  const d = resp.days && resp.days[date];
+  if(!d || d.mark==='x' || !d.mark) return 'x';
+  const ok = (d.bands||[]).some(b=> t>=b[0] && t+SLOT<=b[1]);
+  return ok ? d.mark : 'x';
+}
+function density(ev,date){
+  return slotList(ev).map(t=>{
+    let o=0,m=0;
+    for(const r of ev.responses){ const s=statusAt(r,date,t); if(s==='o')o++; else if(s==='t')m++; }
+    return {t,o,m};
+  });
+}
+function windowsFor(ev,date){
+  const ts = slotList(ev), need = Math.max(1,Math.ceil(ev.duration/SLOT)), out=[];
+  for(let i=0;i+need<=ts.length;i++){
+    const per = ev.responses.map(r=>{
+      let s='o';
+      for(let k=0;k<need;k++){ const st=statusAt(r,date,ts[i+k]); if(st==='x'){s='x';break;} if(st==='t') s='t'; }
+      return s;
+    });
+    out.push({start:ts[i], end:ts[i]+need*SLOT, per, sig:per.join(''),
+      yes:per.filter(x=>x==='o').length, maybe:per.filter(x=>x==='t').length});
+  }
+  const merged=[];
+  for(const w of out){
+    const p = merged[merged.length-1];
+    if(p && p.sig===w.sig && w.start===p.lastStart+SLOT){ p.lastStart=w.start; p.to=w.end; }
+    else merged.push({date, from:w.start, to:w.end, lastStart:w.start, sig:w.sig, per:w.per, yes:w.yes, maybe:w.maybe});
+  }
+  return merged;
+}
+function allWindows(ev){
+  let a=[]; for(const d of ev.dates) a=a.concat(windowsFor(ev,d));
+  a.sort((x,y)=> (y.yes-x.yes) || (y.maybe-x.maybe) || (x.date<y.date?-1:x.date>y.date?1:0) || (x.from-y.from));
+  return a;
+}
+
+/* ---------- Firebase ---------- */
+async function connect(){
+  try{
+    if(typeof firebase === 'undefined') throw {code:'no-sdk', message:'Firebase SDK が読み込めませんでした'};
+    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const cred = await firebase.auth().signInAnonymously();
+    FB.uid = cred.user.uid;
+    FB.db = firebase.firestore();
+    FB.base = FB.db.collection('artifacts').doc(APP_ID).collection('public').doc('data');
+    FB.state = 'ready';
+  }catch(e){
+    FB.state = 'error';
+    FB.msg = fbMessage(e);
+  }
+  render();
+}
+function fbMessage(e){
+  const c = e && e.code;
+  if(c==='no-sdk') return 'ネットワークにつながらず、保存の準備ができませんでした。通信状態を確かめて再読み込みしてください。';
+  if(c==='permission-denied') return 'Firestore のルールで許可されていません（artifacts/'+APP_ID+'/public/data 以下への読み書きが必要です）。';
+  if(c==='auth/operation-not-allowed') return 'Firebase の匿名認証が有効になっていません。';
+  if(c==='unavailable' || c==='auth/network-request-failed') return '通信が届きませんでした。電波やネットワークを確かめて、もう一度お試しください。';
+  return '保存の準備ができませんでした（' + (c || 'unknown') + '）。';
+}
+const evRef = code => FB.base.collection('events').doc(code);
+
+function detach(){
+  if(unsubEv){ unsubEv(); unsubEv=null; }
+  if(unsubResp){ unsubResp(); unsubResp=null; }
+}
+function attach(code){
+  detach();
+  S.ev = S.ev && S.ev.code===code ? S.ev : {code, responses:[], dates:[], dayStart:540, dayEnd:1320, duration:60, title:'', note:'', closed:false, loading:true};
+  unsubEv = evRef(code).onSnapshot(snap=>{
+    if(!snap.exists){ detach(); S.view='home'; S.ev=null; location.hash=''; render(); return toast('その予定は見つかりません'); }
+    const d = snap.data();
+    S.ev = Object.assign({}, S.ev, d, {code, loading:false, responses:S.ev.responses||[]});
+    render();
+  }, err=>{ FB.state='error'; FB.msg=fbMessage(err); render(); });
+  unsubResp = evRef(code).collection('responses').onSnapshot(qs=>{
+    const rs = qs.docs.map(doc=>{
+      const d = doc.data();
+      let days = {};
+      try{ days = JSON.parse(d.daysJson||'{}'); }catch(e){}
+      return { id:doc.id, name:d.name||'（名前なし）', updatedAt:d.updatedAt||0, days };
+    }).sort((a,b)=> (a.updatedAt-b.updatedAt) || (a.id<b.id?-1:1));
+    if(S.ev) S.ev.responses = rs;
+    render();
+  }, err=>{ FB.state='error'; FB.msg=fbMessage(err); render(); });
+}
+
+/* ---------- render ---------- */
+function render(){
+  const v = S.view;
+  if(v==='home') renderHome();
+  else if(v==='create') renderCreate();
+  else if(v==='event') renderEvent();
+}
+function statusNotice(){
+  if(FB.state==='connecting') return `<div class="notice wait">保存サーバーにつないでいます…</div>`;
+  if(FB.state==='error') return `<div class="notice bad">${esc(FB.msg)}</div>`;
+  return '';
+}
+const busy = () => FB.state!=='ready';
+
+/* --- home --- */
+function renderHome(){
+  $('#app').innerHTML = statusNotice() + `
+  <div class="card">
+    <p class="eyebrow">はじめる</p>
+    <button class="btn" id="go-create"${busy()?' disabled':''}>予定をつくる</button>
+    <label class="f">共有されたコードで開く</label>
+    <div class="row">
+      <input type="text" id="joincode" placeholder="ABC123" maxlength="6" style="text-transform:uppercase;font-family:'IBM Plex Mono',monospace;letter-spacing:.16em">
+      <button class="btn alt" id="go-join" style="flex:0 0 88px"${busy()?' disabled':''}>開く</button>
+    </div>
+  </div>
+  ${S.mine.length? `<div class="card"><p class="eyebrow">つくった予定</p>${
+    S.mine.map(m=>`<div class="mine"><div><div class="t">${esc(m.title)}</div><div class="c">${esc(m.code)}</div></div>
+      <button class="btn alt" data-open="${esc(m.code)}" style="width:auto;padding:9px 16px;font-size:13px">開く</button></div>`).join('')
+  }</div>`:''}
+  <div class="card">
+    <p class="eyebrow">つかいかた</p>
+    <p style="font-size:13.5px;color:var(--slate)">
+    候補日ごとに「何時から何時までなら空いているか」を幅で答えてもらいます。○は参加できる、△は予定次第（メモを残せます）、×は無理。
+    集まった帯を重ねて、いちばん濃く重なった時間を割り出します。</p>
+    <p class="hint">つくったあとに出るリンクを渡せば、相手はそのまま回答できます。回答は全員の画面にすぐ反映されます。</p>
+  </div>`;
+  const c=$('#go-create'); if(c) c.onclick = ()=>{ S.draft = blankDraft(); S.calMonth = new Date(); S.view='create'; render(); };
+  const j=$('#go-join'); if(j) j.onclick = ()=> openEvent($('#joincode').value.trim().toUpperCase());
+  $('#joincode').onkeydown = e=>{ if(e.key==='Enter') openEvent(e.target.value.trim().toUpperCase()); };
+  document.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>openEvent(b.dataset.open));
+}
+
+function blankDraft(){ return { title:'', dates:[], dayStart:9*60, dayEnd:22*60, duration:60, note:'' }; }
+
+/* --- create --- */
+function renderCreate(){
+  const d = S.draft, cm = S.calMonth;
+  $('#app').innerHTML = statusNotice() + `
+  <div class="card">
+    <p class="eyebrow">STEP 1 — なんの予定か</p>
+    <label class="f">タイトル</label>
+    <input type="text" id="ttl" value="${esc(d.title)}" placeholder="例：９月の打ち合わせ">
+    <label class="f">ひとこと（任意）</label>
+    <textarea id="note" placeholder="場所や補足があれば">${esc(d.note)}</textarea>
+  </div>
+  <div class="card">
+    <p class="eyebrow">STEP 2 — 候補日</p>
+    <div class="cal">
+      <div class="mon">
+        <button class="nav" id="pm" aria-label="前の月">‹</button>
+        <strong class="mono">${cm.getFullYear()}. ${String(cm.getMonth()+1).padStart(2,'0')}</strong>
+        <button class="nav" id="nm" aria-label="次の月">›</button>
+      </div>
+      <div class="grid7">${DOW.map(x=>`<div class="dow">${x}</div>`).join('')}</div>
+      <div class="grid7" id="days">${calDays(cm,d.dates)}</div>
+    </div>
+    ${d.dates.length? `<div class="chips">${d.dates.slice().sort().map(x=>`<span class="chip">${dshort(x)}</span>`).join('')}</div>`:'<p class="hint">日付をタップして選びます。</p>'}
+  </div>
+  <div class="card">
+    <p class="eyebrow">STEP 3 — 時間のわく</p>
+    <label class="f">回答してもらう範囲</label>
+    <div class="row" style="align-items:center">
+      <select id="ds" aria-label="開始時刻">${timeOptions(0,24*60-SLOT,d.dayStart)}</select>
+      <span style="flex:0 0 auto;color:var(--slate)">〜</span>
+      <select id="de" aria-label="終了時刻">${timeOptions(SLOT,24*60,d.dayEnd)}</select>
+    </div>
+    <label class="f">この予定にかかる時間</label>
+    <select id="du">${Array.from({length:96},(_,i)=>(i+1)*5).map(v=>`<option value="${v}"${v===d.duration?' selected':''}>${durLabel(v)}</option>`).join('')}</select>
+    <p class="hint">この長さがまるごと入る時間帯を探します。時間はすべて5分単位で選べます。</p>
+  </div>
+  <button class="btn" id="mk"${busy()?' disabled':''}>この内容でつくる</button>
+  <button class="btn ghost" id="bk">やめる</button>`;
+
+  $('#ttl').oninput = e=> d.title = e.target.value;
+  $('#note').oninput = e=> d.note = e.target.value;
+  $('#ds').onchange = e=> { d.dayStart = +e.target.value; if(d.dayEnd<=d.dayStart) d.dayEnd = Math.min(24*60, d.dayStart+60); render(); };
+  $('#de').onchange = e=> { d.dayEnd = +e.target.value; if(d.dayEnd<=d.dayStart) d.dayStart = Math.max(0, d.dayEnd-60); render(); };
+  $('#du').onchange = e=> d.duration = +e.target.value;
+  $('#pm').onclick = ()=>{ S.calMonth = new Date(cm.getFullYear(), cm.getMonth()-1, 1); render(); };
+  $('#nm').onclick = ()=>{ S.calMonth = new Date(cm.getFullYear(), cm.getMonth()+1, 1); render(); };
+  document.querySelectorAll('[data-d]').forEach(b=> b.onclick = ()=>{
+    const k=b.dataset.d, i=d.dates.indexOf(k);
+    if(i>=0) d.dates.splice(i,1); else d.dates.push(k);
+    render();
+  });
+  $('#bk').onclick = ()=>{ S.view='home'; render(); };
+  const mk=$('#mk'); if(mk) mk.onclick = createEvent;
+}
+function calDays(cm, picked){
+  const lead = new Date(cm.getFullYear(), cm.getMonth(), 1).getDay();
+  const last = new Date(cm.getFullYear(), cm.getMonth()+1, 0).getDate();
+  const today = iso(new Date());
+  let h='';
+  for(let i=0;i<lead;i++) h+=`<div class="day out"></div>`;
+  for(let n=1;n<=last;n++){
+    const dt = new Date(cm.getFullYear(), cm.getMonth(), n), k = iso(dt);
+    const on = picked.includes(k);
+    const cls = ['day', dt.getDay()===0?'sun':dt.getDay()===6?'sat':'', k<today?'past':'', on?'on':''].filter(Boolean).join(' ');
+    h+=`<button class="${cls}" data-d="${k}" aria-pressed="${on}">${n}</button>`;
+  }
+  return h;
+}
+async function createEvent(){
+  const d = S.draft;
+  if(!d.title.trim()) return toast('タイトルを入れてください');
+  if(!d.dates.length) return toast('候補日を選んでください');
+  if(FB.state!=='ready') return toast('保存サーバーにつながっていません');
+  const btn=$('#mk'); btn.disabled=true; btn.textContent='つくっています…';
+  try{
+    let code='';
+    for(let tries=0;tries<6;tries++){
+      code = newCode();
+      const s = await evRef(code).get();
+      if(!s.exists) break;
+      code='';
+    }
+    if(!code) throw {code:'code-exhausted'};
+    await evRef(code).set({
+      code, title:d.title.trim(), note:d.note.trim(), dates:d.dates.slice().sort(),
+      dayStart:d.dayStart, dayEnd:d.dayEnd, duration:d.duration, slot:SLOT,
+      closed:false, createdAt:Date.now(), ownerUid:FB.uid
+    });
+    S.mine = [{code, title:d.title.trim()}].concat(S.mine.filter(m=>m.code!==code)).slice(0,30);
+    lset('mine', S.mine);
+    openEvent(code);
+  }catch(e){
+    btn.disabled=false; btn.textContent='この内容でつくる';
+    toast(e && e.code==='code-exhausted' ? 'コードが作れませんでした。もう一度お試しください' : fbMessage(e));
+  }
+}
+
+function openEvent(code){
+  if(!/^[A-Z0-9]{6}$/.test(code||'')) return toast('6文字のコードを入れてください');
+  if(FB.state!=='ready') return toast('保存サーバーにつながっていません');
+  A = null;
+  S.view='event'; S.tab='answer';
+  if(location.hash.slice(1)!==code) location.hash = code;
+  attach(code);
+  render();
+}
+
+/* --- event --- */
+function renderEvent(){
+  const ev = S.ev;
+  if(!ev || ev.loading){ $('#app').innerHTML = statusNotice() + `<div class="card"><div class="empty">読み込んでいます…</div></div>`; return; }
+  const owner = ev.ownerUid ? ev.ownerUid===FB.uid : S.mine.some(m=>m.code===ev.code);
+  if(ev.closed && S.tab==='answer') S.tab='result';
+  const head = `
+  <div class="card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <div>
+        <h2 style="margin:0 0 2px">${esc(ev.title)}</h2>
+        <div class="mono" style="font-size:12px;color:var(--slate)">
+          ${ev.dates.length}日 ／ ${fmt(ev.dayStart)}–${fmt(ev.dayEnd)} ／ 所要 ${durLabel(ev.duration)}
+        </div>
+      </div>
+      ${ev.closed?'<span class="closedtag">しめきり済み</span>':''}
+    </div>
+    ${ev.note? `<p class="hint" style="margin-top:8px">${esc(ev.note)}</p>`:''}
+    <div class="codebox" style="margin-top:14px">
+      <div style="flex:1;min-width:0"><small>あいことば</small><div class="cd">${esc(ev.code)}</div></div>
+      <button class="btn alt" id="cp" style="width:auto;padding:10px 14px;font-size:12.5px;white-space:nowrap">リンクをコピー</button>
+    </div>
+    <p class="hint">このリンクを渡すと、相手はそのまま回答できます。</p>
+  </div>`;
+
+  const tabs = `<div class="tabs">
+    <button data-tab="answer" class="${S.tab==='answer'?'on':''}">回答する</button>
+    <button data-tab="result" class="${S.tab==='result'?'on':''}">集計を見る</button>
+  </div>`;
+
+  $('#app').innerHTML = statusNotice() + head + tabs + (S.tab==='answer'? answerHTML(ev) : resultHTML(ev)) +
+    (owner? `<div class="card"><p class="eyebrow">管理</p>
+      <button class="btn alt" id="tog">${ev.closed?'回答を再開する':'回答をしめきる'}</button></div>`:'') +
+    `<button class="btn ghost" id="home">ホームにもどる</button>`;
+
+  $('#cp').onclick = async ()=>{
+    const url = shareURL(ev.code);
+    try{ await navigator.clipboard.writeText(url); toast('リンクをコピーしました'); }
+    catch(e){ toast(url); }
+  };
+  $('#home').onclick = ()=>{ detach(); S.view='home'; S.ev=null; A=null; location.hash=''; render(); };
+  document.querySelectorAll('[data-tab]').forEach(b=> b.onclick = ()=>{ S.tab=b.dataset.tab; render(); });
+  const tg = $('#tog');
+  if(tg) tg.onclick = async ()=>{
+    tg.disabled = true;
+    try{
+      await evRef(ev.code).update({closed: !ev.closed});
+      toast(!ev.closed?'しめきりました':'回答を再開しました');
+    }catch(e){ toast(fbMessage(e)); tg.disabled=false; }
+  };
+  if(S.tab==='answer') bindAnswer();
+}
+
+/* --- answer form --- */
+let A = null;
+function answerHTML(ev){
+  if(ev.closed) return `<div class="card"><div class="empty">この予定は回答をしめきりました。<br>集計をご覧ください。</div></div>`;
+  const mine = ev.responses.find(r=>r.id===FB.uid);
+  if(!A || A.code!==ev.code){
+    A = { code:ev.code, name: mine? mine.name : lget('name',''), days:{} };
+    for(const d of ev.dates){
+      const src = mine && mine.days[d];
+      A.days[d] = src ? {mark:src.mark, bands:(src.bands||[]).map(b=>b.slice()), memo:src.memo||''}
+                      : {mark:null, bands:[[ev.dayStart, ev.dayEnd]], memo:''};
+      if(A.days[d].mark && A.days[d].mark!=='x' && !A.days[d].bands.length) A.days[d].bands=[[ev.dayStart, ev.dayEnd]];
+    }
+  }
+  const blocks = ev.dates.map(d=>{
+    const a = A.days[d];
+    const bands = a.mark && a.mark!=='x' ? `
+      <div>${a.bands.map((b,i)=>`
+        <div class="band">
+          <select data-bs="${d}" data-i="${i}" aria-label="開始">${timeOptions(ev.dayStart, ev.dayEnd-SLOT, b[0])}</select>
+          <span class="tilde">〜</span>
+          <select data-be="${d}" data-i="${i}" aria-label="終了">${timeOptions(ev.dayStart+SLOT, ev.dayEnd, b[1])}</select>
+          ${a.bands.length>1?`<button class="del" data-bd="${d}" data-i="${i}" aria-label="この時間帯を消す">×</button>`:''}
+        </div>`).join('')}
+        <button class="addband" data-ba="${d}">＋ 時間帯を足す</button>
+      </div>`:'';
+    const memo = a.mark==='t' ? `<textarea data-mm="${d}" placeholder="どんな予定次第か（例：前の会議が延びたら遅れます）">${esc(a.memo)}</textarea>`:'';
+    return `<div class="dayblock">
+      <div class="dhead">
+        <div class="dt">${dlabel(d)}</div>
+        <div class="marks">
+          ${['o','t','x'].map(m=>`<button class="mk ${a.mark===m?'on':''}" data-m="${m}" data-mk="${d}" aria-pressed="${a.mark===m}">${m==='o'?'○':m==='t'?'△':'✕'}</button>`).join('')}
+        </div>
+      </div>${bands}${memo}</div>`;
+  }).join('');
+
+  return `<div class="card">
+    <p class="eyebrow">${mine?'回答を直す':'回答する'}</p>
+    <label class="f">お名前</label>
+    <input type="text" id="nm2" value="${esc(A.name)}" placeholder="山田 太郎">
+    <p class="hint" style="margin-bottom:6px">○＝参加できる／△＝予定次第（メモを残せます）／✕＝むり。○と△は、空いている時間帯を5分単位で入れてください。</p>
+    ${blocks}
+    <button class="btn" id="send" style="margin-top:14px">${mine?'回答を更新する':'回答を送る'}</button>
+  </div>`;
+}
+function bindAnswer(){
+  const ev=S.ev; if(ev.closed) return;
+  const n=$('#nm2'); if(n) n.oninput = e=> A.name=e.target.value;
+  document.querySelectorAll('[data-mk]').forEach(b=> b.onclick=()=>{
+    const d=b.dataset.mk, a=A.days[d];
+    a.mark = a.mark===b.dataset.m ? null : b.dataset.m;
+    if(a.mark && a.mark!=='x' && !a.bands.length) a.bands=[[ev.dayStart,ev.dayEnd]];
+    render();
+  });
+  document.querySelectorAll('[data-bs]').forEach(s=> s.onchange=()=>{
+    const a=A.days[s.dataset.bs], i=+s.dataset.i; a.bands[i][0]=+s.value;
+    if(a.bands[i][1]<=a.bands[i][0]) a.bands[i][1]=Math.min(ev.dayEnd, a.bands[i][0]+SLOT);
+    render();
+  });
+  document.querySelectorAll('[data-be]').forEach(s=> s.onchange=()=>{
+    const a=A.days[s.dataset.be], i=+s.dataset.i; a.bands[i][1]=+s.value;
+    if(a.bands[i][1]<=a.bands[i][0]) a.bands[i][0]=Math.max(ev.dayStart, a.bands[i][1]-SLOT);
+    render();
+  });
+  document.querySelectorAll('[data-ba]').forEach(b=> b.onclick=()=>{
+    const a=A.days[b.dataset.ba]; const last=a.bands[a.bands.length-1];
+    const st=Math.min(ev.dayEnd-SLOT, last? last[1] : ev.dayStart);
+    a.bands.push([st, Math.min(ev.dayEnd, st+60)]); render();
+  });
+  document.querySelectorAll('[data-bd]').forEach(b=> b.onclick=()=>{ A.days[b.dataset.bd].bands.splice(+b.dataset.i,1); render(); });
+  document.querySelectorAll('[data-mm]').forEach(t=> t.oninput=e=> A.days[t.dataset.mm].memo=e.target.value);
+  $('#send').onclick = submit;
+}
+async function submit(){
+  const ev=S.ev;
+  if(!A.name.trim()) return toast('お名前を入れてください');
+  if(!ev.dates.some(d=>A.days[d].mark)) return toast('どこか1日は答えてください');
+  if(ev.closed){ render(); return toast('しめきられました'); }
+  const btn=$('#send'); btn.disabled=true; btn.textContent='送っています…';
+  const days={};
+  for(const d of ev.dates){ const a=A.days[d];
+    days[d] = { mark:a.mark||'x', bands:(a.mark&&a.mark!=='x')? a.bands.map(b=>b.slice()):[], memo:(a.memo||'').trim() }; }
+  try{
+    await evRef(ev.code).collection('responses').doc(FB.uid).set({
+      name:A.name.trim(), updatedAt:Date.now(), daysJson:JSON.stringify(days)
+    });
+    lset('name', A.name.trim());
+    A=null; S.tab='result'; render(); toast('回答を送りました');
+  }catch(e){
+    btn.disabled=false; btn.textContent='回答を送る';
+    toast(fbMessage(e));
+  }
+}
+
+/* --- results --- */
+function resultHTML(ev){
+  const total = ev.responses.length;
+  if(!total) return `<div class="card"><div class="empty">まだ回答がありません。<br>リンクを共有してみてください。</div></div>`;
+  const best = allWindows(ev).slice(0,5);
+  const names = ev.responses.map(r=>r.name);
+
+  const bestHTML = best.map((w,i)=>winHTML(ev,w,i===0)).join('') || '<div class="empty">全員が空く時間は見つかりませんでした。</div>';
+
+  const perDay = ev.dates.map(d=>{
+    const den = density(ev,d);
+    const bars = den.map((s)=>{
+      const a = total? s.o/total : 0;
+      const mh = total? (s.m/total)*100 : 0;
+      const hour = ((s.t+SLOT)%60===0);
+      return `<div class="slot${hour?' hour':''}" title="${fmt(s.t)} ○${s.o} △${s.m}">
+        ${s.o?`<span class="fill" style="opacity:${(0.16+a*0.84).toFixed(2)}"></span>`:''}
+        ${s.m?`<span class="mb" style="height:${Math.max(4,mh*0.28).toFixed(1)}px"></span>`:''}</div>`;
+    }).join('');
+    const top = windowsFor(ev,d).sort((a,b)=>(b.yes-a.yes)||(b.maybe-a.maybe)||(a.from-b.from)).slice(0,2);
+    return `<div class="dayblock">
+      <div class="dhead"><div class="dt">${dlabel(d)}</div></div>
+      <div class="track">
+        <div class="tlabels mono"><span>${fmt(ev.dayStart)}</span><span>${fmt(Math.round((ev.dayStart+ev.dayEnd)/2/SLOT)*SLOT)}</span><span>${fmt(ev.dayEnd)}</span></div>
+        <div class="tbar">${bars}</div>
+      </div>
+      <div style="margin-top:10px">${top.map(w=>winHTML(ev,w,false,true)).join('')}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="card">
+    <p class="eyebrow">いちばん重なる時間</p>
+    ${bestHTML}
+    <p class="hint">${total}人が回答（${names.map(esc).join('、')}）</p>
+  </div>
+  <div class="card">
+    <p class="eyebrow">日ごとの重なり</p>
+    <p class="hint" style="margin:0 0 6px">濃いほど○が多い時間。下の帯は△の人数です。</p>
+    ${perDay}
+  </div>`;
+}
+function winHTML(ev,w,isTop,noDate){
+  const yes=[],may=[],no=[];
+  ev.responses.forEach((r,i)=>{ const s=w.per[i]; (s==='o'?yes:s==='t'?may:no).push(r); });
+  const span = w.to - w.from;
+  const memos = may.filter(r=> r.days[w.date] && r.days[w.date].memo);
+  return `<div class="win${isTop?' top':''}">
+    <div class="wtop">
+      <div><span class="date">${noDate?'':dshort(w.date)}</span><span class="time">${fmt(w.from)}–${fmt(w.to)}</span></div>
+      <div class="tally"><span class="o">○${w.yes}</span><span class="t">△${w.maybe}</span><span class="x">✕${no.length}</span></div>
+    </div>
+    ${span>ev.duration? `<div class="free">この ${fmt(w.from)}–${fmt(w.to)} の中なら、どこで ${durLabel(ev.duration)} とっても同じ顔ぶれです</div>`:''}
+    <div class="who">
+      ${yes.length?`<span>○ <b>${yes.map(r=>esc(r.name)).join('、')}</b></span>`:''}
+      ${may.length?`<span>△ <b>${may.map(r=>esc(r.name)).join('、')}</b></span>`:''}
+      ${no.length?`<span>✕ ${no.map(r=>esc(r.name)).join('、')}</span>`:''}
+    </div>
+    ${memos.length? `<div class="memo">${memos.map(r=>`<p>${esc(r.name)}：${esc(r.days[w.date].memo)}</p>`).join('')}</div>`:''}
+  </div>`;
+}
+
+/* ---------- boot ---------- */
+S.mine = lget('mine', []) || [];
+render();
+connect().then(()=>{
+  if(FB.state!=='ready') return;
+  const h = (location.hash||'').slice(1).toUpperCase();
+  if(/^[A-Z0-9]{6}$/.test(h)) openEvent(h);
+});
+window.addEventListener('hashchange', ()=>{
+  const h = (location.hash||'').slice(1).toUpperCase();
+  if(FB.state!=='ready') return;
+  if(/^[A-Z0-9]{6}$/.test(h)){ if(!S.ev || S.ev.code!==h) openEvent(h); }
+  else if(S.view==='event'){ detach(); S.view='home'; S.ev=null; A=null; render(); }
+});
+</script>
+</body>
+</html>

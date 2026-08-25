@@ -11,6 +11,7 @@
 | マスターページ | https://oceanhermit.github.io/my-tools/ | ツール一覧 |
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
+| かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（Auth / Firestore）を利用 |
 
 ## ディレクトリ構成
 
@@ -20,6 +21,8 @@ my-tools/
 ├── kyogaku-go/
 │   └── index.html
 ├── kizuna-karuta/
+│   └── index.html
+├── kasanari/
 │   └── index.html
 ├── .nojekyll             # GitHub Pages 用（Jekyll 処理を無効化）
 └── README.md
@@ -50,3 +53,16 @@ git push
 - リポジトリが Public のため Firebase の `apiKey` は公開されるが、これは Web 版 Firebase の
   正常な仕様で秘密情報ではない。実質的な防御はセキュリティルール側で行う。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。
+- **かさなり**も同じ Firebase プロジェクトの匿名認証 + Firestore を使う。データの置き場所は
+  `artifacts/kasanari/public/data/events/{6文字コード}`、回答はその下の
+  `responses/{uid}`（1人1文書なので、他人の回答を上書きできない）。
+  Firestore のルールが次のように appId をワイルドカードにしていれば、追加設定なしで動く。
+
+  ```
+  match /artifacts/{appId}/public/data/{document=**} {
+    allow read, write: if request.auth != null;
+  }
+  ```
+
+  キズナかるた用に appId を直書きしている場合は、`kasanari` も通るように広げる必要がある。
+  画面に「Firestore のルールで許可されていません」と出たらこれが原因。
