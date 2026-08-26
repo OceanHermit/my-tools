@@ -14,7 +14,10 @@
         "バトルUIとWeb Audio APIのサウンドを仕上げる"
       ],
       "links": [
-        { "label": "Google Apps Script", "url": "" }
+        {
+          "label": "Google Apps Script",
+          "url": ""
+        }
       ],
       "updated": "2026-08-26"
     },
@@ -29,7 +32,10 @@
         "Firestore / Storage のセキュリティルールを確認する"
       ],
       "links": [
-        { "label": "Firebase (karuta-game-c8fc8)", "url": "" }
+        {
+          "label": "Firebase (karuta-game-c8fc8)",
+          "url": ""
+        }
       ],
       "updated": "2026-08-26"
     },
@@ -43,8 +49,14 @@
         "通知の取りこぼしがないか折を見て確認する"
       ],
       "links": [
-        { "label": "Zapier", "url": "" },
-        { "label": "LINE Messaging API", "url": "" }
+        {
+          "label": "Zapier",
+          "url": ""
+        },
+        {
+          "label": "LINE Messaging API",
+          "url": ""
+        }
       ],
       "updated": "2026-08-26"
     },
@@ -59,8 +71,14 @@
         "フロントエンドと API を接続する"
       ],
       "links": [
-        { "label": "Cloudflare Pages + D1 + R2", "url": "" },
-        { "label": "Google OAuth", "url": "" }
+        {
+          "label": "Cloudflare Pages + D1 + R2",
+          "url": ""
+        },
+        {
+          "label": "Google OAuth",
+          "url": ""
+        }
       ],
       "updated": "2026-08-21"
     },
@@ -75,23 +93,35 @@
         "横帯（試験期間・合宿）の終日登録を確認する"
       ],
       "links": [
-        { "label": "会合マトリックス【キズナ地区】", "url": "" },
-        { "label": "スキル kizuna-meeting-schedule", "url": "" }
+        {
+          "label": "会合マトリックス【キズナ地区】",
+          "url": ""
+        },
+        {
+          "label": "スキル kizuna-meeting-schedule",
+          "url": ""
+        }
       ],
       "updated": "2026-08-24"
     },
     {
       "id": "t3",
-      "name": "日程調整ツール",
-      "summary": "○△✕ だけでなく「この時間帯なら空いている」と範囲で答えられる調整ツール。ログイン不要、リンクを開いて名前を入れる方式。",
-      "status": "idea",
-      "progress": 15,
+      "name": "かさなり（日程調整）",
+      "summary": "○△✕ ではなく「この時間の中でなら空いている」を時間帯で集める日程調整。回答はログイン不要、予定をつくる人だけ Google ログインが必要。",
+      "status": "test",
+      "progress": 85,
       "next": [
-        "候補日設定〜回答〜締め切りの画面設計を起こす",
-        "実装の土台（保存先）を決める"
+        "Firebase で Google ログインを有効化し、承認済みドメインに oceanhermit.github.io を追加する",
+        "実際の日程調整で通しで試す"
       ],
-      "links": [],
-      "updated": "2026-08-25"
+      "links": [
+        {
+          "label": "Firebase (artifacts/kasanari)",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-26",
+      "url": "./kasanari/"
     },
     {
       "id": "t7",
@@ -115,8 +145,14 @@
         "新しいメールが届いたら同じルールで反映する"
       ],
       "links": [
-        { "label": "Gmail", "url": "" },
-        { "label": "Googleカレンダー", "url": "" }
+        {
+          "label": "Gmail",
+          "url": ""
+        },
+        {
+          "label": "Googleカレンダー",
+          "url": ""
+        }
       ],
       "updated": "2026-08-24"
     },
@@ -130,7 +166,10 @@
         "この台帳とハブの役割分担を整理する"
       ],
       "links": [
-        { "label": "Notion ツールDB", "url": "" }
+        {
+          "label": "Notion ツールDB",
+          "url": ""
+        }
       ],
       "updated": "2026-08-21"
     },
@@ -145,7 +184,10 @@
         "着手時期を判断する"
       ],
       "links": [
-        { "label": "Notion 企画DB", "url": "" }
+        {
+          "label": "Notion 企画DB",
+          "url": ""
+        }
       ],
       "updated": "2026-08-02"
     }
