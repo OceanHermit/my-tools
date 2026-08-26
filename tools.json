@@ -63,14 +63,22 @@
     {
       "id": "t2",
       "name": "ビジュアルページビルダー（CMS）",
-      "summary": "テキスト・図形・画像をパワポのように自由配置し、アニメーション付きの HTML/CSS/JS を zip で書き出すエディタ。",
-      "status": "build",
-      "progress": 45,
+      "summary": "テキスト・図形・画像をIllustratorのように自由配置してWebサイトを作るエディタ。複数ページとナビゲーション、PC/スマホ別レイアウト、SEO設定に対応し、ZIP書き出しとワンクリック公開ができる。",
+      "status": "test",
+      "progress": 85,
       "next": [
-        "バックエンドのデプロイを確認する",
-        "フロントエンドと API を接続する"
+        "Google Cloud のリダイレクトURIを直してログインを通す",
+        "ログイン後にクラウド保存・画像アップロード・公開を通しで検証する"
       ],
       "links": [
+        {
+          "label": "公開サイト",
+          "url": "https://originalcms.pages.dev/"
+        },
+        {
+          "label": "GitHub リポジトリ",
+          "url": "https://github.com/OceanHermit/originalCMS"
+        },
         {
           "label": "Cloudflare Pages + D1 + R2",
           "url": ""
@@ -80,7 +88,8 @@
           "url": ""
         }
       ],
-      "updated": "2026-08-21"
+      "updated": "2026-08-26",
+      "url": "https://originalcms.pages.dev/"
     },
     {
       "id": "t4",
