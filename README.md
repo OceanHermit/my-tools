@@ -119,6 +119,13 @@ git add . && git commit -m "add: 新ツール名" && git push
   Firestore は配列の入れ子を保存できないため、日付ごとの時間帯は `daysJson` に
   JSON 文字列として入れている。
 
+### かさなりの予定を消す
+
+主催者だけが自分のつくった予定を消せる（管理カードの「この予定を消す」→ 確認 → 実行）。
+Firestore は配下のドキュメントを自動で消さないので、アプリが
+`responses/*` を消してから本体を消している。開いていた人の画面は
+その場でホームに戻り、「この予定は消されました」と出る。
+
 ### かさなりのログイン
 
 **予定をつくる人はログインが必須。回答する人は任意**（匿名のままでも答えられる）。
@@ -170,6 +177,12 @@ match /artifacts/kasanari/public/data/events/{code} {
   match /responses/{uid} {
     allow read: if request.auth != null;
     allow write: if request.auth != null && request.auth.uid == uid;
+
+    // 主催者が予定を消すときは、集まった回答も消す必要がある。
+    // アプリは「回答 → 本体」の順に消すので、この get() は本体がある間に評価される。
+    allow delete: if request.auth != null
+      && get(/databases/$(database)/documents/artifacts/kasanari/public/data/events/$(code))
+           .data.ownerUid == request.auth.uid;
   }
 }
 ```
