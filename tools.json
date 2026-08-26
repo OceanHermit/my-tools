@@ -126,14 +126,15 @@
     {
       "id": "t7",
       "name": "返答待ちダッシュボード",
-      "summary": "AI 側が返答を待っている未回答のタスクを、タスク名・状況・答えるべきこと の3点で一覧にする手動記録型の Artifact。",
-      "status": "idea",
-      "progress": 20,
+      "summary": "Claude側が回答を待っている未決の項目を、タスク名・状況・答えるべきこと の3点で並べる一覧。このサイトの「返答待ち」タブとして実装。",
+      "status": "live",
+      "progress": 100,
       "next": [
-        "作るか、この台帳に統合するかを決める"
+        "答えが出た項目はその都度消す"
       ],
       "links": [],
-      "updated": "2026-08-03"
+      "updated": "2026-08-26",
+      "url": "./#pending"
     },
     {
       "id": "t5",
@@ -158,20 +159,24 @@
     },
     {
       "id": "t6",
-      "name": "ツールハブ（ペグボード）",
-      "summary": "自作ツールへの入口をまとめたローカル HTML のハブ。端末をまたいで開けるよう Notion の「ツールDB」と接続。",
+      "name": "ツールハブ / 開発台帳（このサイト）",
+      "summary": "自作ツールの入口と開発状況を1か所にまとめたサイト。ローカルHTMLのペグボードと Artifact の台帳をここへ集約した。端末を選ばず同じURLで開ける。",
       "status": "live",
-      "progress": 85,
+      "progress": 95,
       "next": [
-        "この台帳とハブの役割分担を整理する"
+        "新しいツールを作ったら tools.json に追記する"
       ],
       "links": [
+        {
+          "label": "GitHub リポジトリ",
+          "url": "https://github.com/OceanHermit/my-tools"
+        },
         {
           "label": "Notion ツールDB",
           "url": ""
         }
       ],
-      "updated": "2026-08-21"
+      "updated": "2026-08-26"
     },
     {
       "id": "t8",
