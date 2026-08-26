@@ -1,6 +1,7 @@
 # My Tools
 
-自作ツールを 1 か所にまとめて公開するためのリポジトリ。
+自作ツールを 1 か所にまとめて公開するリポジトリ。
+トップページは Artifact「Claudeツール開発台帳」を統合した**開発台帳兼ツール一覧**。
 
 ## 公開URL
 
@@ -8,7 +9,7 @@
 
 | ツール | URL | 備考 |
 |---|---|---|
-| マスターページ | https://oceanhermit.github.io/my-tools/ | ツール一覧 |
+| 台帳（トップ） | https://oceanhermit.github.io/my-tools/ | 全ツールの現在地 + 公開済みツールへの入口 |
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
@@ -17,7 +18,9 @@
 
 ```
 my-tools/
-├── index.html            # マスターページ（ツール一覧）
+├── index.html            # 台帳の見た目（HTML + CSS）
+├── ledger.js             # 台帳の描画・編集ロジック
+├── tools.json            # ★台帳データの正本★
 ├── kyogaku-go/
 │   └── index.html
 ├── kizuna-karuta/
@@ -30,16 +33,39 @@ my-tools/
 
 ビルド不要の静的サイト。`index.html` を置いたフォルダ名がそのまま URL になる。
 
+## 台帳データの扱い
+
+正本は **`tools.json`**。ページはこれを読み込んで描画する。
+
+ページ上の「編集」で書き換えた内容は、**その端末のブラウザの localStorage にだけ**保存される
+（GitHub Pages は静的配信のため、サーバー側に保存する手段がない）。
+ローカル編集がある間はページ上部に橙色の帯が出て、次の2つが選べる。
+
+- **JSONをコピー** — 編集後の全データをクリップボードへ。これを `tools.json` に反映すれば正本になる
+- **リポジトリ版に戻す** — ローカル編集を破棄して `tools.json` の内容に戻す
+
+### tools.json のフィールド
+
+| キー | 内容 |
+|---|---|
+| `id` | 一意な識別子（`t1` など） |
+| `name` | ツール名 |
+| `summary` | 概要・目的 |
+| `status` | `idea` / `build` / `test` / `live` / `hold` |
+| `progress` | 0〜100 の整数 |
+| `url` | 公開URL。入れるとカードに「開く」ボタンが出る。サイト内なら `./ツール名/` |
+| `next` | 次にやること（文字列の配列） |
+| `links` | 保管場所（`{label, url}` の配列。`url` は空でも可） |
+| `updated` | 更新日 `YYYY-MM-DD` |
+
 ## ツールを追加する手順
 
 1. `新ツール名/index.html` を作成（フォルダ名は半角英小文字・ハイフン推奨）
-2. ルートの `index.html` にカードを 1 つ追加
+2. `tools.json` にエントリを追加し、`url` に `./新ツール名/` を入れる
 3. push する
 
 ```bash
-git add .
-git commit -m "add: 新ツール名"
-git push
+git add . && git commit -m "add: 新ツール名" && git push
 ```
 
 数十秒〜数分で自動反映される。
@@ -54,6 +80,7 @@ git push
 - リポジトリが Public のため Firebase の `apiKey` は公開されるが、これは Web 版 Firebase の
   正常な仕様で秘密情報ではない。実質的な防御はセキュリティルール側で行う。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。
+- `tools.json` も Public に見える。社外秘の URL やメモは書かないこと。
 - **かさなり**も同じ Firebase プロジェクトを使う。データの置き場所は
   `artifacts/kasanari/public/data/events/{6文字コード}`、回答はその下の
   `responses/{uid}`（1人1文書なので、他人の回答を上書きできない）。

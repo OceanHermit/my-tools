@@ -1,0 +1,195 @@
+{
+  "updated": "2026-08-26",
+  "tools": [
+    {
+      "id": "t1",
+      "name": "教学でGo!",
+      "summary": "仏教の基本教義を学ぶクイズゲーム。レベル選択・問題数選択つき。",
+      "status": "build",
+      "progress": 65,
+      "url": "./kyogaku-go/",
+      "next": [
+        "問題・ヒントの本番内容を差し替える",
+        "小問（複数サブ問題）の制限時間バランスを調整",
+        "バトルUIとWeb Audio APIのサウンドを仕上げる"
+      ],
+      "links": [
+        {
+          "label": "Google Apps Script",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-26"
+    },
+    {
+      "id": "t10",
+      "name": "キズナかるた",
+      "summary": "オンライン対戦のかるた。ランダムマッチと合言葉入室に対応。取り札の画像と音声は Firebase Storage から読み込む。",
+      "status": "live",
+      "progress": 90,
+      "url": "./kizuna-karuta/",
+      "next": [
+        "Firestore / Storage のセキュリティルールを確認する"
+      ],
+      "links": [
+        {
+          "label": "Firebase (karuta-game-c8fc8)",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-26"
+    },
+    {
+      "id": "t9",
+      "name": "Notion 通知パイプライン",
+      "summary": "Notion データベースの更新を Zapier 経由で LINE Messaging API に流す通知の仕組み。",
+      "status": "build",
+      "progress": 95,
+      "next": [
+        "通知の取りこぼしがないか折を見て確認する"
+      ],
+      "links": [
+        {
+          "label": "Zapier",
+          "url": ""
+        },
+        {
+          "label": "LINE Messaging API",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-26"
+    },
+    {
+      "id": "t2",
+      "name": "ビジュアルページビルダー（CMS）",
+      "summary": "テキスト・図形・画像をパワポのように自由配置し、アニメーション付きの HTML/CSS/JS を zip で書き出すエディタ。",
+      "status": "build",
+      "progress": 45,
+      "next": [
+        "バックエンドのデプロイを確認する",
+        "フロントエンドと API を接続する"
+      ],
+      "links": [
+        {
+          "label": "Cloudflare Pages + D1 + R2",
+          "url": ""
+        },
+        {
+          "label": "Google OAuth",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-21"
+    },
+    {
+      "id": "t4",
+      "name": "会合マトリックス自動化",
+      "summary": "月間予定のカレンダー画像から、参加予定入力表の生成と「キズナ地区日程」カレンダーへの登録までを一気に行うスキル。",
+      "status": "test",
+      "progress": 80,
+      "next": [
+        "実際の月間日程表で通しで検証する",
+        "横帯（試験期間・合宿）の終日登録を確認する"
+      ],
+      "links": [
+        {
+          "label": "会合マトリックス【キズナ地区】",
+          "url": ""
+        },
+        {
+          "label": "スキル kizuna-meeting-schedule",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-24"
+    },
+    {
+      "id": "t3",
+      "name": "かさなり（日程調整）",
+      "summary": "○△✕ ではなく「この時間の中でなら空いている」を時間帯で集める日程調整。回答はログイン不要、予定をつくる人だけ Google ログインが必要。",
+      "status": "test",
+      "progress": 85,
+      "next": [
+        "Firebase で Google ログインを有効化し、承認済みドメインに oceanhermit.github.io を追加する",
+        "実際の日程調整で通しで試す"
+      ],
+      "links": [
+        {
+          "label": "Firebase (artifacts/kasanari)",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-26",
+      "url": "./kasanari/"
+    },
+    {
+      "id": "t7",
+      "name": "返答待ちダッシュボード",
+      "summary": "AI 側が返答を待っている未回答のタスクを、タスク名・状況・答えるべきこと の3点で一覧にする手動記録型の Artifact。",
+      "status": "idea",
+      "progress": 20,
+      "next": [
+        "作るか、この台帳に統合するかを決める"
+      ],
+      "links": [],
+      "updated": "2026-08-03"
+    },
+    {
+      "id": "t5",
+      "name": "日程通達メール → カレンダー登録",
+      "summary": "jdss.jp の未読メールから未登録の行事と日程変更を拾い、除外行事を避けつつお仏前係も自動で足す常設ルール。",
+      "status": "live",
+      "progress": 100,
+      "next": [
+        "新しいメールが届いたら同じルールで反映する"
+      ],
+      "links": [
+        {
+          "label": "Gmail",
+          "url": ""
+        },
+        {
+          "label": "Googleカレンダー",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-24"
+    },
+    {
+      "id": "t6",
+      "name": "ツールハブ（ペグボード）",
+      "summary": "自作ツールへの入口をまとめたローカル HTML のハブ。端末をまたいで開けるよう Notion の「ツールDB」と接続。",
+      "status": "live",
+      "progress": 85,
+      "next": [
+        "この台帳とハブの役割分担を整理する"
+      ],
+      "links": [
+        {
+          "label": "Notion ツールDB",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-21"
+    },
+    {
+      "id": "t8",
+      "name": "ミッション化タスクツール",
+      "summary": "割り当てられたタスクをミッションとしてこなし、貢献度を見える化する 3〜10人向けツール。完了判定は自己申告のみ。",
+      "status": "hold",
+      "progress": 5,
+      "next": [
+        "貢献度の測定指標（完了数／難易度／工数）を決める",
+        "着手時期を判断する"
+      ],
+      "links": [
+        {
+          "label": "Notion 企画DB",
+          "url": ""
+        }
+      ],
+      "updated": "2026-08-02"
+    }
+  ]
+}
