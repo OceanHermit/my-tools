@@ -232,6 +232,34 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 .gbtn svg{width:18px;height:18px;flex:0 0 auto;display:block}
 .lnk{font-size:12.5px;color:var(--slate);text-decoration:underline;padding:6px 2px;flex:0 0 auto}
 .vmark{color:var(--pulse);font-weight:700;margin-left:1px;font-size:11px;vertical-align:.05em}
+
+/* ---- 時間帯えらび（ドラッグ式） ---- */
+.tl{margin:2px 0}
+.tl-track{position:relative;height:40px;border-radius:9px;background:var(--field);overflow:hidden;
+  touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.tl-track .tk{position:absolute;top:0;bottom:0;width:1px;background:var(--hour);pointer-events:none}
+.tl-band{position:absolute;top:3px;bottom:3px;border-radius:6px;background:var(--pulse);color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:grab;min-width:3px}
+.tl-band.t{background:var(--maybe)}
+.tl-band .bl{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+  letter-spacing:-.02em;pointer-events:none;white-space:nowrap}
+.tl-band .h{position:absolute;top:0;bottom:0;width:15px;touch-action:none;cursor:ew-resize}
+.tl-band .h.l{left:0}.tl-band .h.r{right:0}
+.tl-band .h::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:3px;height:15px;border-radius:2px;background:rgba(255,255,255,.9)}
+.tl-lbl{position:relative;height:14px;margin-top:3px}
+.tl-lbl span{position:absolute;top:0;font-size:10px;color:var(--slate);white-space:nowrap}
+.brows{margin-top:8px}
+.brow{display:flex;align-items:center;gap:5px;margin-bottom:6px}
+.brow .bt{font-size:13.5px;font-weight:600;flex:0 0 auto;letter-spacing:-.01em}
+.brow .tilde{color:var(--slate);font-size:11px;flex:0 0 auto}
+.step{width:30px;height:30px;border-radius:8px;background:var(--field);color:var(--ink);font-size:15px;
+  line-height:1;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:700}
+.step.del{margin-left:auto;color:var(--slate);font-weight:400}
+.tlwarn{font-size:12px;color:var(--maybe);margin:6px 0 0}
+.tl-acts{display:flex;gap:16px;align-items:center;margin-top:2px}
+.addband.sub{color:var(--slate)}
+.tlhelp{font-size:11.5px;color:var(--slate);margin:4px 0 0;line-height:1.5}
 </style>
 </head>
 <body>
@@ -293,10 +321,21 @@ function durLabel(v){
   return (h?`${h}時間`:'') + (m?`${m}分`:'') || '0分';
 }
 function newCode(){ let s=''; for(let i=0;i<6;i++) s+=ALPHA[Math.floor(Math.random()*ALPHA.length)]; return s; }
-function timeOptions(start,end,sel){
+function timeOptions(start,end,sel,step){
+  const k = step || SLOT;
   let h='';
-  for(let t=start;t<=end;t+=SLOT) h+=`<option value="${t}"${t===sel?' selected':''}>${fmt(t)}</option>`;
+  for(let t=start;t<=end;t+=k) h+=`<option value="${t}"${t===sel?' selected':''}>${fmt(t)}</option>`;
+  if(sel!=null && (sel-start)%k!==0) h = `<option value="${sel}" selected>${fmt(sel)}</option>` + h;
   return h;
+}
+/* 所要時間は 1時間までは5分刻み、そこから先はだんだん粗く。
+   288項目のスクロールを出さないための刻み。 */
+function durationChoices(){
+  const out=[];
+  for(let v=5; v<=60; v+=5) out.push(v);
+  for(let v=75; v<=240; v+=15) out.push(v);
+  for(let v=270; v<=480; v+=30) out.push(v);
+  return out;
 }
 function shareURL(code){
   return location.origin + location.pathname + '#' + code;
@@ -345,6 +384,17 @@ function allWindows(ev){
 /* ---------- Firebase / ログイン ---------- */
 const GLOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.2C12.4 13.5 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v7.8h12.7c-.3 2.1-1.6 5.3-4.7 7.4l7.7 5.9c4.6-4.2 7.4-10.4 7.4-17z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.5-.8-3-.8-4.6s.3-3.1.8-4.6l-7.9-6.2C1 16.5 0 20.1 0 24s1 7.5 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-5.9c-2.1 1.4-4.8 2.4-8.2 2.4-6.3 0-11.6-4-13.5-9.6l-7.9 6.2C6.5 42.6 14.6 48 24 48z"/></svg>';
 
+/* onAuthStateChanged は非同期なので、ログイン直後に FB を見ると古い。
+   currentUser から FB を引き写す口をひとつにして、都度ここを通す。 */
+function syncUser(){
+  if(typeof firebase==='undefined' || !firebase.apps.length) return false;
+  const u = firebase.auth().currentUser;
+  if(!u) return false;
+  if(lastUid && lastUid!==u.uid) A = null;   // 別人になったら書きかけは持ち越さない
+  FB.user=u; FB.uid=u.uid; FB.isAnon=!!u.isAnonymous; FB.state='ready'; lastUid=u.uid;
+  return true;
+}
+
 function googleProvider(){
   const p = new firebase.auth.GoogleAuthProvider();
   p.setCustomParameters({prompt:'select_account'});
@@ -378,9 +428,7 @@ function connect(){
         auth.signInAnonymously().catch(e=>{ FB.state='error'; FB.msg=fbMessage(e); render(); done(); });
         return;
       }
-      FB.user = user; FB.uid = user.uid; FB.isAnon = !!user.isAnonymous; FB.state = 'ready';
-      if(lastUid && lastUid!==user.uid) A = null;   // 別人になったら書きかけを持ち越さない
-      lastUid = user.uid;
+      syncUser();
       render(); done();
     }, err=>{ FB.state='error'; FB.msg=fbMessage(err); render(); done(); });
   });
@@ -392,6 +440,7 @@ async function signIn(){
     // 匿名のまま回答した人は「連携」で入る。uid が変わらないので回答はそのまま残る。
     if(u && u.isAnonymous) await u.linkWithPopup(googleProvider());
     else await auth.signInWithPopup(googleProvider());
+    syncUser();
     await markProvider('google');
     adoptAccountName();
     toast('ログインしました'); render();
@@ -435,6 +484,7 @@ async function takeOver(cred){
     for(const c of carry){ try{ await evRef(c.code).collection('responses').doc(oldUid).set(c.data); }catch(e2){} }
     return toast(fbMessage(e));
   }
+  syncUser();
   for(const c of carry){
     try{ await evRef(c.code).collection('responses').doc(res.user.uid).set(Object.assign({}, c.data, {provider:'google'})); }catch(e){}
   }
@@ -499,7 +549,7 @@ function acctHTML(){
   if(FB.state!=='ready') return '';
   if(FB.isAnon){
     return `<div class="acct">
-      <p class="sub">ログインしておくと、スマホとPCなど別の端末からでも自分の回答や予定を直せます。しなくてもこのまま使えます。</p>
+      <p class="sub">回答するだけならログインは要りません。予定をつくるとき、また別の端末から自分の回答を直したいときにログインしてください。</p>
       <button class="gbtn" id="gin">${GLOGO}<span>Google でログイン</span></button>
     </div>`;
   }
@@ -560,7 +610,8 @@ function renderHome(){
   $('#app').innerHTML = statusNotice() + acctHTML() + `
   <div class="card">
     <p class="eyebrow">はじめる</p>
-    <button class="btn" id="go-create"${busy()?' disabled':''}>予定をつくる</button>
+    <button class="btn" id="go-create"${busy()?' disabled':''}>${FB.isAnon?'ログインして予定をつくる':'予定をつくる'}</button>
+    ${FB.isAnon?'<p class="hint">予定をつくるにはログインが必要です。回答するだけならログインは要りません。</p>':''}
     <label class="f">共有されたコードで開く</label>
     <div class="row">
       <input type="text" id="joincode" placeholder="ABC123" maxlength="6" style="text-transform:uppercase;font-family:'IBM Plex Mono',monospace;letter-spacing:.16em">
@@ -576,9 +627,15 @@ function renderHome(){
     <p style="font-size:13.5px;color:var(--slate)">
     候補日ごとに「何時から何時までなら空いているか」を幅で答えてもらいます。○は参加できる、△は予定次第（メモを残せます）、×は無理。
     集まった帯を重ねて、いちばん濃く重なった時間を割り出します。</p>
-    <p class="hint">つくったあとに出るリンクを渡せば、相手はそのまま回答できます。回答は全員の画面にすぐ反映されます。</p>
+    <p class="hint">予定をつくる人だけログインが必要です。つくったあとに出るリンクを渡せば、相手はログインなしでそのまま回答できます。回答は全員の画面にすぐ反映されます。</p>
   </div>`;
-  const c=$('#go-create'); if(c) c.onclick = ()=>{ S.draft = blankDraft(); S.calMonth = new Date(); S.view='create'; render(); };
+  const c=$('#go-create'); if(c) c.onclick = async ()=>{
+    if(FB.isAnon){
+      await signIn();
+      if(FB.isAnon) return;   // ログインしなかった／できなかった
+    }
+    S.draft = blankDraft(); S.calMonth = new Date(); S.view='create'; render();
+  };
   const j=$('#go-join'); if(j) j.onclick = ()=> openEvent($('#joincode').value.trim().toUpperCase());
   $('#joincode').onkeydown = e=>{ if(e.key==='Enter') openEvent(e.target.value.trim().toUpperCase()); };
   document.querySelectorAll('[data-open]').forEach(b=> b.onclick=()=>openEvent(b.dataset.open));
@@ -588,6 +645,7 @@ function blankDraft(){ return { title:'', dates:[], dayStart:9*60, dayEnd:22*60,
 
 /* --- create --- */
 function renderCreate(){
+  if(FB.state==='ready' && FB.isAnon){ S.view='home'; renderHome(); return toast('予定をつくるにはログインが必要です'); }
   const d = S.draft, cm = S.calMonth;
   $('#app').innerHTML = statusNotice() + acctHTML() + `
   <div class="card">
@@ -614,13 +672,13 @@ function renderCreate(){
     <p class="eyebrow">STEP 3 — 時間のわく</p>
     <label class="f">回答してもらう範囲</label>
     <div class="row" style="align-items:center">
-      <select id="ds" aria-label="開始時刻">${timeOptions(0,24*60-SLOT,d.dayStart)}</select>
+      <select id="ds" aria-label="開始時刻">${timeOptions(0,24*60-30,d.dayStart,30)}</select>
       <span style="flex:0 0 auto;color:var(--slate)">〜</span>
-      <select id="de" aria-label="終了時刻">${timeOptions(SLOT,24*60,d.dayEnd)}</select>
+      <select id="de" aria-label="終了時刻">${timeOptions(30,24*60,d.dayEnd,30)}</select>
     </div>
     <label class="f">この予定にかかる時間</label>
-    <select id="du">${Array.from({length:96},(_,i)=>(i+1)*5).map(v=>`<option value="${v}"${v===d.duration?' selected':''}>${durLabel(v)}</option>`).join('')}</select>
-    <p class="hint">この長さがまるごと入る時間帯を探します。時間はすべて5分単位で選べます。</p>
+    <select id="du">${durationChoices().map(v=>`<option value="${v}"${v===d.duration?' selected':''}>${durLabel(v)}</option>`).join('')}</select>
+    <p class="hint">この長さがまるごと入る時間帯を探します。回答は5分単位まで詰められます。</p>
   </div>
   <button class="btn" id="mk"${busy()?' disabled':''}>この内容でつくる</button>
   <button class="btn ghost" id="bk">やめる</button>`;
@@ -659,6 +717,7 @@ async function createEvent(){
   if(!d.title.trim()) return toast('タイトルを入れてください');
   if(!d.dates.length) return toast('候補日を選んでください');
   if(FB.state!=='ready') return toast('保存サーバーにつながっていません');
+  if(FB.isAnon) return toast('予定をつくるにはログインが必要です');
   const btn=$('#mk'); btn.disabled=true; btn.textContent='つくっています…';
   try{
     let code='';
@@ -765,16 +824,7 @@ function answerHTML(ev){
   }
   const blocks = ev.dates.map(d=>{
     const a = A.days[d];
-    const bands = a.mark && a.mark!=='x' ? `
-      <div>${a.bands.map((b,i)=>`
-        <div class="band">
-          <select data-bs="${d}" data-i="${i}" aria-label="開始">${timeOptions(ev.dayStart, ev.dayEnd-SLOT, b[0])}</select>
-          <span class="tilde">〜</span>
-          <select data-be="${d}" data-i="${i}" aria-label="終了">${timeOptions(ev.dayStart+SLOT, ev.dayEnd, b[1])}</select>
-          ${a.bands.length>1?`<button class="del" data-bd="${d}" data-i="${i}" aria-label="この時間帯を消す">×</button>`:''}
-        </div>`).join('')}
-        <button class="addband" data-ba="${d}">＋ 時間帯を足す</button>
-      </div>`:'';
+    const bands = a.mark && a.mark!=='x' ? tlBlock(ev,d,a) : '';
     const memo = a.mark==='t' ? `<textarea data-mm="${d}" placeholder="どんな予定次第か（例：前の会議が延びたら遅れます）">${esc(a.memo)}</textarea>`:'';
     return `<div class="dayblock">
       <div class="dhead">
@@ -789,36 +839,217 @@ function answerHTML(ev){
     <p class="eyebrow">${mine?'回答を直す':'回答する'}</p>
     <label class="f">お名前</label>
     <input type="text" id="nm2" value="${esc(A.name)}" placeholder="山田 太郎">
-    <p class="hint" style="margin-bottom:6px">○＝参加できる／△＝予定次第（メモを残せます）／✕＝むり。○と△は、空いている時間帯を5分単位で入れてください。</p>
+    <p class="hint" style="margin-bottom:2px">○＝参加できる／△＝予定次第（メモを残せます）／✕＝むり。</p>
+    <p class="hint" style="margin-bottom:6px">○と△は、バーをドラッグして空いている時間帯を選びます。帯は左右の端でのばし、まん中をつかむと動かせます。空いているところをタップすると ${durLabel(ev.duration)} ぶん足せます。−/＋は5分ずつ。</p>
     ${blocks}
     <button class="btn" id="send" style="margin-top:14px">${mine?'回答を更新する':'回答を送る'}</button>
   </div>`;
 }
+/* ---- 時間帯えらび（時間軸をドラッグ／±5分で微調整） ---- */
+function bandPct(ev,m){ return (m-ev.dayStart)/(ev.dayEnd-ev.dayStart)*100; }
+
+function tlInner(ev,a){
+  let ticks='';
+  for(let t=Math.ceil(ev.dayStart/60)*60; t<ev.dayEnd; t+=60){
+    if(t<=ev.dayStart) continue;
+    ticks += `<span class="tk" style="left:${bandPct(ev,t).toFixed(3)}%"></span>`;
+  }
+  const cls = a.mark==='t' ? ' t' : '';
+  const bands = a.bands.map((b,i)=>{
+    const l=bandPct(ev,b[0]), w=bandPct(ev,b[1])-l;
+    return `<div class="tl-band${cls}" data-i="${i}" style="left:${l.toFixed(3)}%;width:${w.toFixed(3)}%">
+      ${w>=27?`<span class="bl">${fmt(b[0])}–${fmt(b[1])}</span>`:''}
+      ${w>=12?`<span class="h l"></span><span class="h r"></span>`:''}
+    </div>`;
+  }).join('');
+  return ticks + bands;
+}
+function tlLabels(ev){
+  const span=ev.dayEnd-ev.dayStart, step=Math.max(1, Math.ceil(Math.ceil(span/60)/5))*60;
+  const ts=[]; for(let t=ev.dayStart; t<ev.dayEnd; t+=step) ts.push(t);
+  if(ev.dayEnd-ts[ts.length-1] < step*0.6) ts.pop();
+  ts.push(ev.dayEnd);
+  return ts.map(t=>{
+    const p=bandPct(ev,t);
+    const tf = p<=0.5?'translateX(0)' : p>=99.5?'translateX(-100%)' : 'translateX(-50%)';
+    return `<span style="left:${p.toFixed(3)}%;transform:${tf}">${fmt(t)}</span>`;
+  }).join('');
+}
+function rowsHTML(ev,a){
+  if(!a.bands.length) return `<p class="tlwarn">時間帯が選ばれていません。バーをドラッグするか「終日にする」を押してください。</p>`;
+  return a.bands.map((b,i)=>`<div class="brow">
+    <button class="step" data-st="${i}:0:-1" aria-label="開始を5分早める">−</button>
+    <span class="bt mono">${fmt(b[0])}</span>
+    <button class="step" data-st="${i}:0:1" aria-label="開始を5分遅らせる">＋</button>
+    <span class="tilde">〜</span>
+    <button class="step" data-st="${i}:1:-1" aria-label="終了を5分早める">−</button>
+    <span class="bt mono">${fmt(b[1])}</span>
+    <button class="step" data-st="${i}:1:1" aria-label="終了を5分遅らせる">＋</button>
+    <button class="step del" data-bd="${i}" aria-label="この時間帯を消す">×</button>
+  </div>`).join('');
+}
+function tlBlock(ev,d,a){
+  return `<div class="tl">
+    <div class="tl-track" data-d="${d}" role="group" aria-label="空いている時間帯">${tlInner(ev,a)}</div>
+    <div class="tl-lbl mono">${tlLabels(ev)}</div>
+    <div class="brows" data-d="${d}">${rowsHTML(ev,a)}</div>
+    <div class="tl-acts">
+      <button class="addband" data-ba="${d}">＋ 時間帯を足す</button>
+      <button class="addband sub" data-ball="${d}">終日にする</button>
+    </div>
+  </div>`;
+}
+function normBands(list, ev){
+  const cl = list.map(b=>[Math.max(ev.dayStart, Math.min(b[0],b[1])), Math.min(ev.dayEnd, Math.max(b[0],b[1]))])
+                 .filter(b=> b[1]-b[0] >= SLOT)
+                 .sort((x,y)=> x[0]-y[0]);
+  const out=[];
+  for(const b of cl){
+    const p=out[out.length-1];
+    if(p && b[0]<=p[1]) p[1]=Math.max(p[1], b[1]);
+    else out.push(b.slice());
+  }
+  return out;
+}
+function firstGap(a, ev, want){
+  const bs = normBands(a.bands, ev);
+  let at = ev.dayStart;
+  for(const b of bs){
+    if(b[0]-at >= SLOT) return [at, Math.min(b[0], at+want)];
+    at = Math.max(at, b[1]);
+  }
+  if(ev.dayEnd-at >= SLOT) return [at, Math.min(ev.dayEnd, at+want)];
+  return null;
+}
+function paintDay(d){
+  const ev=S.ev, a=A.days[d];
+  const track=document.querySelector('.tl-track[data-d="'+d+'"]');
+  const rows=document.querySelector('.brows[data-d="'+d+'"]');
+  if(track) track.innerHTML = tlInner(ev,a);
+  if(rows) rows.innerHTML = rowsHTML(ev,a);
+}
+function bindTimeline(track){
+  const ev=S.ev, d=track.dataset.d;
+  const DRAGSTEP = 15;              // 指で扱うぶんは15分刻み。5分は下の ± で。
+  const span = ev.dayEnd - ev.dayStart;
+  const toMin = x=>{
+    const r=track.getBoundingClientRect();
+    const p=Math.min(1, Math.max(0, (x-r.left)/r.width));
+    return ev.dayStart + p*span;
+  };
+  const snap = m=>{
+    const v=Math.round((m-ev.dayStart)/DRAGSTEP)*DRAGSTEP + ev.dayStart;
+    return Math.min(ev.dayEnd, Math.max(ev.dayStart, v));
+  };
+  let drag=null;
+
+  track.addEventListener('pointerdown', e=>{
+    if(e.button && e.button!==0) return;
+    const a=A.days[d];
+    const handle=e.target.closest('.h'), bandEl=e.target.closest('.tl-band');
+    if(handle && bandEl){
+      const i=+bandEl.dataset.i;
+      drag={kind:'edge', i, edge:handle.classList.contains('l')?0:1, orig:a.bands[i].slice()};
+    }else if(bandEl){
+      const i=+bandEl.dataset.i;
+      drag={kind:'move', i, orig:a.bands[i].slice(), from:toMin(e.clientX)};
+    }else{
+      const at=snap(toMin(e.clientX));
+      a.bands.push([at, Math.min(ev.dayEnd, at+SLOT)]);
+      drag={kind:'new', i:a.bands.length-1, anchor:at};
+      paintDay(d);
+    }
+    drag.moved=false;
+    try{ track.setPointerCapture(e.pointerId); }catch(err){}
+  });
+
+  track.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    const a=A.days[d], m=toMin(e.clientX);
+    if(drag.kind==='new'){
+      const v=snap(m); let lo=Math.min(drag.anchor,v), hi=Math.max(drag.anchor,v);
+      if(hi-lo < SLOT) hi=Math.min(ev.dayEnd, lo+SLOT);
+      if(a.bands[drag.i][0]!==lo || a.bands[drag.i][1]!==hi) drag.moved=true;
+      a.bands[drag.i]=[lo,hi];
+    }else if(drag.kind==='edge'){
+      const b=a.bands[drag.i]; if(!b) return;
+      const v=snap(m);
+      if(drag.edge===0) b[0]=Math.max(ev.dayStart, Math.min(v, b[1]-SLOT));
+      else b[1]=Math.min(ev.dayEnd, Math.max(v, b[0]+SLOT));
+      drag.moved=true;
+    }else{
+      const b=a.bands[drag.i]; if(!b) return;
+      const len=drag.orig[1]-drag.orig[0];
+      let st=snap(drag.orig[0] + (m-drag.from));
+      st=Math.max(ev.dayStart, Math.min(ev.dayEnd-len, st));
+      a.bands[drag.i]=[st, st+len];
+      drag.moved=true;
+    }
+    paintDay(d);
+  });
+
+  const finish = ()=>{
+    if(!drag) return;
+    const a=A.days[d];
+    // 動かさずに置いただけなら、所要時間ぶんの帯を置く
+    if(drag.kind==='new' && !drag.moved){
+      const want=Math.max(SLOT, ev.duration);
+      let st=drag.anchor, en=st+want;
+      if(en>ev.dayEnd){ en=ev.dayEnd; st=Math.max(ev.dayStart, en-want); }
+      a.bands[drag.i]=[st,en];
+    }
+    drag=null;
+    a.bands=normBands(a.bands, ev);
+    render();
+  };
+  track.addEventListener('pointerup', finish);
+  track.addEventListener('lostpointercapture', finish);
+  track.addEventListener('pointercancel', ()=>{
+    if(!drag) return;
+    const a=A.days[d];
+    if(drag.kind==='new') a.bands.splice(drag.i,1);
+    else if(a.bands[drag.i]) a.bands[drag.i]=drag.orig;
+    drag=null; paintDay(d);
+  });
+}
+function bindRows(rows){
+  const ev=S.ev, d=rows.dataset.d;
+  rows.addEventListener('click', e=>{
+    const a=A.days[d];
+    const st=e.target.closest('[data-st]');
+    if(st){
+      const [i,edge,dir]=st.dataset.st.split(':').map(Number);
+      const b=a.bands[i]; if(!b) return;
+      let v=b[edge]+dir*SLOT;
+      if(edge===0) v=Math.max(ev.dayStart, Math.min(v, b[1]-SLOT));
+      else v=Math.min(ev.dayEnd, Math.max(v, b[0]+SLOT));
+      b[edge]=v; a.bands=normBands(a.bands, ev); render(); return;
+    }
+    const del=e.target.closest('[data-bd]');
+    if(del){ a.bands.splice(+del.dataset.bd,1); render(); }
+  });
+}
+
 function bindAnswer(){
   const ev=S.ev; if(ev.closed) return;
   const n=$('#nm2'); if(n) n.oninput = e=> A.name=e.target.value;
+  document.querySelectorAll('.tl-track').forEach(bindTimeline);
+  document.querySelectorAll('.brows').forEach(bindRows);
   document.querySelectorAll('[data-mk]').forEach(b=> b.onclick=()=>{
     const d=b.dataset.mk, a=A.days[d];
     a.mark = a.mark===b.dataset.m ? null : b.dataset.m;
     if(a.mark && a.mark!=='x' && !a.bands.length) a.bands=[[ev.dayStart,ev.dayEnd]];
     render();
   });
-  document.querySelectorAll('[data-bs]').forEach(s=> s.onchange=()=>{
-    const a=A.days[s.dataset.bs], i=+s.dataset.i; a.bands[i][0]=+s.value;
-    if(a.bands[i][1]<=a.bands[i][0]) a.bands[i][1]=Math.min(ev.dayEnd, a.bands[i][0]+SLOT);
-    render();
-  });
-  document.querySelectorAll('[data-be]').forEach(s=> s.onchange=()=>{
-    const a=A.days[s.dataset.be], i=+s.dataset.i; a.bands[i][1]=+s.value;
-    if(a.bands[i][1]<=a.bands[i][0]) a.bands[i][0]=Math.max(ev.dayStart, a.bands[i][1]-SLOT);
-    render();
-  });
   document.querySelectorAll('[data-ba]').forEach(b=> b.onclick=()=>{
-    const a=A.days[b.dataset.ba]; const last=a.bands[a.bands.length-1];
-    const st=Math.min(ev.dayEnd-SLOT, last? last[1] : ev.dayStart);
-    a.bands.push([st, Math.min(ev.dayEnd, st+60)]); render();
+    const a=A.days[b.dataset.ba];
+    const g=firstGap(a, ev, Math.max(SLOT, ev.duration));
+    if(!g) return toast('空いているところがありません');
+    a.bands.push(g); a.bands=normBands(a.bands, ev); render();
   });
-  document.querySelectorAll('[data-bd]').forEach(b=> b.onclick=()=>{ A.days[b.dataset.bd].bands.splice(+b.dataset.i,1); render(); });
+  document.querySelectorAll('[data-ball]').forEach(b=> b.onclick=()=>{
+    A.days[b.dataset.ball].bands=[[ev.dayStart, ev.dayEnd]]; render();
+  });
   document.querySelectorAll('[data-mm]').forEach(t=> t.oninput=e=> A.days[t.dataset.mm].memo=e.target.value);
   $('#send').onclick = submit;
 }
@@ -826,6 +1057,10 @@ async function submit(){
   const ev=S.ev;
   if(!A.name.trim()) return toast('お名前を入れてください');
   if(!ev.dates.some(d=>A.days[d].mark)) return toast('どこか1日は答えてください');
+  for(const d of ev.dates){
+    const a=A.days[d];
+    if(a.mark && a.mark!=='x' && !a.bands.length) return toast(dshort(d)+' の時間帯が選ばれていません');
+  }
   if(ev.closed){ render(); return toast('しめきられました'); }
   const btn=$('#send'); btn.disabled=true; btn.textContent='送っています…';
   const days={};

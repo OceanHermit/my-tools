@@ -62,9 +62,11 @@ git push
 
 ### かさなりのログイン
 
-ログインは**任意**。既定は匿名認証で、ログインしなくてもそのまま回答できる。
+**予定をつくる人はログインが必須。回答する人は任意**（匿名のままでも答えられる）。
+
 Google でログインすると uid がアカウントに固定されるので、スマホと PC など
-別の端末からでも同じ回答を直せる。匿名のまま回答した人が後からログインした場合は、
+別の端末からでも同じ回答を直せる。予定の管理（しめきり）も、つくった端末に
+縛られなくなる。匿名のまま回答した人が後からログインした場合は、
 Firebase のアカウント連携（`linkWithPopup`）で uid が変わらないため回答はそのまま残る。
 
 **Google ログインを使うには Firebase Console 側の設定が要る。**
@@ -97,9 +99,15 @@ match /artifacts/{appId}/public/data/{document=**} {
 ```
 match /artifacts/kasanari/public/data/events/{code} {
   allow read: if request.auth != null;
-  allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+
+  // 予定づくりはログイン済み（匿名でない）だけ。アプリ側と同じ制限をサーバー側でも効かせる。
+  allow create: if request.auth != null
+                && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                && request.resource.data.ownerUid == request.auth.uid;
+
   allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
 
+  // 回答は匿名でも可。ただし自分の文書だけ。
   match /responses/{uid} {
     allow read: if request.auth != null;
     allow write: if request.auth != null && request.auth.uid == uid;
@@ -107,6 +115,10 @@ match /artifacts/kasanari/public/data/events/{code} {
 }
 ```
 
-この締めたルールを使う場合、匿名でつくった予定の管理権限（しめきり）は、
-あとから別の Google アカウントに移せない。予定をつくる前にログインしておけば、
-同じアカウントでどの端末からでも管理できる。
+**注意：これは追記であって置き換えではない。** キズナかるたのデータは
+`artifacts/karuta-v1/public/data/rooms/...` にあるので、上のルールだけに差し替えると
+かるたが動かなくなる。かるたの分（`match /artifacts/karuta-v1/public/data/{document=**}`）は
+必ず残すこと。
+
+なお、いまのところ Firestore のルールは触らなくても動く。まずは Authentication の
+2項目だけ入れて、かるたが今までどおり動くことを確かめてから検討すればよい。
