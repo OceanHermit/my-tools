@@ -1,7 +1,13 @@
 # My Tools
 
 自作ツールを 1 か所にまとめて公開するリポジトリ。
-トップページは Artifact「Claudeツール開発台帳」を統合した**開発台帳兼ツール一覧**。
+トップページは **開発台帳 / ツール一覧 / 返答待ちダッシュボード** を兼ねる。
+
+かつて別々にあった次の3つは、すべてここへ集約済み。**もう使わない。**
+
+- Artifact「Claudeツール開発台帳」
+- ローカルHTMLのツールハブ（ペグボード）
+- 返答待ちダッシュボード（構想のみで未実装だった）
 
 ## 公開URL
 
@@ -10,17 +16,20 @@
 | ツール | URL | 備考 |
 |---|---|---|
 | 台帳（トップ） | https://oceanhermit.github.io/my-tools/ | 全ツールの現在地 + 公開済みツールへの入口 |
+| 返答待ち | https://oceanhermit.github.io/my-tools/#pending | Claude側が答えを待っている未決の項目 |
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
+| ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
 ## ディレクトリ構成
 
 ```
 my-tools/
-├── index.html            # 台帳の見た目（HTML + CSS）
-├── ledger.js             # 台帳の描画・編集ロジック
+├── index.html            # 見た目（HTML + CSS）
+├── ledger.js             # 描画・編集ロジック（台帳 / 返答待ち 共通）
 ├── tools.json            # ★台帳データの正本★
+├── pending.json          # ★返答待ちデータの正本★
 ├── kyogaku-go/
 │   └── index.html
 ├── kizuna-karuta/
@@ -33,16 +42,29 @@ my-tools/
 
 ビルド不要の静的サイト。`index.html` を置いたフォルダ名がそのまま URL になる。
 
-## 台帳データの扱い
+## 画面構成
 
-正本は **`tools.json`**。ページはこれを読み込んで描画する。
+トップページは2つのタブを持つ。URL は共通で、返答待ちタブは `#pending` が付く。
+
+| タブ | 内容 |
+|---|---|
+| 開発台帳 | ツールごとのステータス・進捗・次にやること・保管場所。公開済みなら「開く」ボタン |
+| 返答待ち | Claude側が答えを待っている項目を タスク名 / 状況 / 答えるべきこと の3点で表示 |
+
+返答待ちの項目にツールを紐づけると、台帳のそのカードに「返答待ち N 件」が出る。
+押すと、そのツールで絞り込んだ返答待ちに飛ぶ。
+
+## データの扱い
+
+正本は **`tools.json`** と **`pending.json`**。ページはこれを読み込んで描画する。
 
 ページ上の「編集」で書き換えた内容は、**その端末のブラウザの localStorage にだけ**保存される
 （GitHub Pages は静的配信のため、サーバー側に保存する手段がない）。
 ローカル編集がある間はページ上部に橙色の帯が出て、次の2つが選べる。
 
-- **JSONをコピー** — 編集後の全データをクリップボードへ。これを `tools.json` に反映すれば正本になる
-- **リポジトリ版に戻す** — ローカル編集を破棄して `tools.json` の内容に戻す
+- **JSONをコピー** — いま開いているタブに対応するファイル（`tools.json` または `pending.json`）の
+  全内容をクリップボードへ。これをリポジトリに反映すれば正本になる
+- **リポジトリ版に戻す** — ローカル編集を破棄して両ファイルの内容に戻す
 
 ### tools.json のフィールド
 
@@ -57,6 +79,17 @@ my-tools/
 | `next` | 次にやること（文字列の配列） |
 | `links` | 保管場所（`{label, url}` の配列。`url` は空でも可） |
 | `updated` | 更新日 `YYYY-MM-DD` |
+
+### pending.json のフィールド
+
+| キー | 内容 |
+|---|---|
+| `id` | 一意な識別子（`p1` など） |
+| `task` | タスク名 |
+| `situation` | 状況。なぜ止まっているか |
+| `question` | 答えるべきこと。これに答えれば進む、という一点 |
+| `toolId` | 関連する `tools.json` の `id`。空でも可 |
+| `created` | 登録日 `YYYY-MM-DD` |
 
 ## ツールを追加する手順
 

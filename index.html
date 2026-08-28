@@ -48,6 +48,18 @@ h1{font-family:"Shippori Mincho B1","Yu Mincho",serif; font-weight:600;
 .lede{margin:0; color:var(--ink-2); font-size:13.5px; max-width:60ch}
 .meta{font-family:"Roboto Mono",ui-monospace,monospace; font-size:11.5px; color:var(--ink-3); font-variant-numeric:tabular-nums}
 
+/* ---------- タブ ---------- */
+.tabs{display:flex; gap:4px; padding:4px; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:8px; align-self:flex-start; max-width:100%; overflow-x:auto}
+.tab{display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+  border:none; background:transparent; color:var(--ink-2); font-size:13px; font-family:inherit;
+  padding:7px 15px; border-radius:5px; cursor:pointer; transition:background .15s, color .15s}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--surface); color:var(--ink); font-weight:500; box-shadow:var(--shadow)}
+.tab .badge{font-family:"Roboto Mono",monospace; font-size:10.5px; font-variant-numeric:tabular-nums;
+  min-width:18px; padding:1px 6px; border-radius:99px; background:var(--s-build); color:#fff}
+.tab .badge[data-zero="1"]{background:var(--line); color:var(--ink-3)}
+
 /* ---------- tally / filters ---------- */
 .tally{display:flex; flex-wrap:wrap; gap:8px}
 .chip{display:inline-flex; align-items:center; gap:7px; padding:6px 12px 6px 10px;
@@ -110,6 +122,29 @@ button{font-family:inherit}
 :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
 
 .empty{padding:44px 20px; text-align:center; color:var(--ink-3); font-size:13.5px; border:1px dashed var(--line); border-radius:var(--radius)}
+
+/* ---------- 返答待ちバッジ（台帳カード内） ---------- */
+.await{display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+  font-size:11.5px; padding:3px 10px; border-radius:99px; cursor:pointer; font-family:inherit;
+  color:var(--s-build); background:color-mix(in srgb,var(--s-build) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--s-build) 40%,transparent)}
+.await:hover{background:color-mix(in srgb,var(--s-build) 20%,transparent)}
+
+/* ---------- 返答待ちリスト ---------- */
+.pend{display:flex; flex-direction:column; gap:12px}
+.pitem{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--s-build);
+  border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:11px}
+.pitem-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px}
+.pitem h2{margin:0; font-size:15.5px; font-weight:700; line-height:1.5}
+.pitem .who{flex:none; font-size:11px; padding:3px 9px; border-radius:4px; white-space:nowrap;
+  color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line)}
+.pfield{display:flex; flex-direction:column; gap:3px}
+.pfield p{margin:0; font-size:13px; line-height:1.75}
+.pfield .body{color:var(--ink-2)}
+.pfield.ask .body{color:var(--ink); font-weight:500}
+.pitem-foot{display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding-top:10px; border-top:1px solid var(--line-soft)}
 
 /* ---------- ローカル編集バナー ---------- */
 .draft{display:none; align-items:center; flex-wrap:wrap; gap:9px; padding:11px 14px;
