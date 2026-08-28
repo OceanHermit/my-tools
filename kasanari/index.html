@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
 <title>かさなり — 時間帯で決める日程調整</title>
 <meta name="description" content="候補日ごとに空いている時間帯を集めて、いちばん重なる時間を5分単位で割り出す日程調整ツール。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,48 +30,7 @@
   --card-shadow:0 1px 0 rgba(20,24,43,.05),0 8px 24px -18px rgba(20,24,43,.5);
   --toast-shadow:0 10px 30px -10px rgba(20,24,43,.7);
   --r:14px;
-}
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --ink:#E7EBF6;
-    --slate:#9AA4C0;
-    --line:#2C3350;
-    --field:#222840;
-    --paper:#161A2B;
-    --pulse:#6E8CFF;
-    --maybe:#F0A64A;
-    --none:#5A6382;
-    --bg:#0D1020;
-    --solid:#E7EBF6;
-    --on-solid:#12162A;
-    --sat:#7FB2E8;
-    --sun:#E8807A;
-    --memo-bg:#39301B;
-    --memo-ink:#F0DBAE;
-    --hour:rgba(13,16,32,.55);
-    --card-shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -18px rgba(0,0,0,.9);
-    --toast-shadow:0 10px 30px -10px rgba(0,0,0,.9);
-  }
-}
-:root[data-theme="dark"]{
-  --ink:#E7EBF6;
-  --slate:#9AA4C0;
-  --line:#2C3350;
-  --field:#222840;
-  --paper:#161A2B;
-  --pulse:#6E8CFF;
-  --maybe:#F0A64A;
-  --none:#5A6382;
-  --bg:#0D1020;
-  --solid:#E7EBF6;
-  --on-solid:#12162A;
-  --sat:#7FB2E8;
-  --sun:#E8807A;
-  --memo-bg:#39301B;
-  --memo-ink:#F0DBAE;
-  --hour:rgba(13,16,32,.55);
-  --card-shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -18px rgba(0,0,0,.9);
-  --toast-shadow:0 10px 30px -10px rgba(0,0,0,.9);
+  color-scheme:light;   /* select やスクロールバーなど、ブラウザ側の部品もライトで描かせる */
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -266,14 +226,13 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
 /* ---- 取り消しのきかない操作 ---- */
 :root{--danger:#C0392F}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--danger:#F08A82}}
-:root[data-theme="dark"]{--danger:#F08A82}
 .btn.ghost.danger-link{color:var(--danger);font-weight:700;margin-top:2px}
 .danger{background:var(--memo-bg);color:var(--memo-ink);border-radius:11px;padding:12px 13px;
   margin-top:12px;font-size:12.5px;line-height:1.65}
 .danger p{margin:0}
 .danger strong{color:var(--danger)}
 .btn.del2{background:var(--danger);color:#fff}
+img.avatar{object-fit:cover;background:var(--field);display:block}
 </style>
 </head>
 <body>
@@ -568,8 +527,15 @@ function acctHTML(){
     </div>`;
   }
   const name = (FB.user && (FB.user.displayName || FB.user.email)) || 'ログイン中';
+  const ini = esc(name.trim().charAt(0));
+  const photo = FB.user && FB.user.photoURL;
+  // Google のプロフィール画像。referrerpolicy を付けないと 403 で落ちることがある。
+  // 取れなかったときは頭文字にさし替える（bindAcct の onerror）。
+  const av = photo
+    ? `<img class="avatar" id="avimg" src="${esc(photo)}" alt="" referrerpolicy="no-referrer" data-ini="${ini}">`
+    : `<span class="avatar">${ini}</span>`;
   return `<div class="acct">
-    <div class="me"><span class="avatar">${esc(name.trim().charAt(0))}</span>
+    <div class="me">${av}
       <div style="min-width:0"><div class="nm">${esc(name)}</div><div class="sub">Google でログイン中</div></div></div>
     <button class="lnk" id="gout">ログアウト</button>
   </div>`;
@@ -577,6 +543,12 @@ function acctHTML(){
 function bindAcct(){
   const i=$('#gin'); if(i) i.onclick = signIn;
   const o=$('#gout'); if(o) o.onclick = signOut;
+  const im=$('#avimg');
+  if(im) im.onerror = ()=>{
+    const sp=document.createElement('span');
+    sp.className='avatar'; sp.textContent=im.dataset.ini||'';
+    im.replaceWith(sp);
+  };
 }
 
 function detach(){
