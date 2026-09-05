@@ -107,14 +107,17 @@ git add . && git commit -m "add: 新ツール名" && git push
 
 - **キズナかるた**は Firebase の匿名認証を使用。公開ドメイン (`oceanhermit.github.io`) 上で
   サインインが通ることを確認済み（匿名認証は「承認済みドメイン」の制約を受けないため設定不要）。
-  ただしこれは匿名認証に限った話で、かさなりの Google ログインは承認済みドメインの登録が要る。
+  ただしこれは匿名認証に限った話。かさなりは Google ログインを使うので、
+  かさなり側のプロジェクトには承認済みドメインの登録が要る（かるた側には不要）。
 - 一方で、匿名認証は誰でも uid を取得できる。第三者に触られたくないデータがある場合は
   Firestore / Storage のセキュリティルールを確認すること。
 - リポジトリが Public のため Firebase の `apiKey` は公開されるが、これは Web 版 Firebase の
   正常な仕様で秘密情報ではない。実質的な防御はセキュリティルール側で行う。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。
 - `tools.json` も Public に見える。社外秘の URL やメモは書かないこと。
-- **かさなり**も同じ Firebase プロジェクトを使う。データの置き場所は
+- **かさなり**は専用の Firebase プロジェクト `kasanari-9f071` を使う（かるたとは別）。
+  ルールも無料枠もかるたと独立しているので、片方をいじってももう片方は壊れない。
+  データの置き場所は
   `artifacts/kasanari/public/data/events/{6文字コード}`、回答はその下の
   `responses/{uid}`（1人1文書なので、他人の回答を上書きできない）。
   Firestore は配列の入れ子を保存できないため、日付ごとの時間帯は `daysJson` に
@@ -139,81 +142,46 @@ Firebase のアカウント連携（`linkWithPopup`）で uid が変わらない
 **Google ログインを使うには Firebase Console 側の設定が要る。**
 匿名認証と違い、Google 認証は「承認済みドメイン」の制約を受ける。
 
-1. Authentication → Sign-in method → **Google** を有効化
+1. Authentication → Sign-in method → **Google** と **匿名** を有効化
 2. Authentication → Settings → 承認済みドメイン に **`oceanhermit.github.io`** を追加
+
+（`kasanari-9f071` では設定済み。プロジェクトを作り直すときはここから。）
 
 未設定のときは画面に理由が出る（「Firebase 側でこのログイン方法が有効になっていません」／
 「このドメインが Firebase の『承認済みドメイン』に入っていません」）。
 匿名のままの利用はこの設定なしでも動く。
 
-### ログイン画面に出る名前について
+### ログイン画面に出る名前について（対応済み）
 
-Google のアカウント選択画面には、**Firebase プロジェクトの公開名**と
-**authDomain**（`karuta-game-c8fc8.firebaseapp.com`）が出る。
-どちらも「かさなり」とは無関係の文字なので、初めて使う人が戸惑いやすい。
+Google のアカウント選択画面には **Firebase プロジェクトの公開名**と **authDomain** が出る。
+当初はかるたと同じプロジェクトに相乗りしていたため、かさなりのログインなのに
+`karuta-game-c8fc8.firebaseapp.com` と出て紛らわしかった。
 
-- **公開名**は変えられる（Authentication → Sign-in method → Google → プロジェクトの公開名）。
-  ただし kizuna-karuta と共通なので、両方をカバーする中立な名前にするのが無難。
-- **authDomain はプロジェクトIDから決まり、あとから変えられない。**
-  ここを `kasanari-…` にしたいなら、かさなり専用の Firebase プロジェクトを
-  新規に作るしかない（そのぶんルールや無料枠もかるたと独立する）。
+**authDomain はプロジェクトIDから決まり、あとから変えられない。** そのため
+かさなり専用プロジェクト `kasanari-9f071` を新規に作って移した。
+いまは `kasanari-9f071.firebaseapp.com` と出る。
 
+公開名のほうは変えられる（Authentication → Sign-in method → Google → プロジェクトの公開名）。
 ### かさなりに必要な Firestore ルール
 
-貼り付け用のルールを `kasanari/firestore.rules` に置いてある。
-Firestore エミュレータで 22 項目（匿名は予定を作れない／他人の回答を書き換えられない／
-主催者だけが予定と回答を消せる、など）を実行して確認済み。
+貼り付け用のルールを `kasanari/firestore.rules` に置いてある。**その中身をそのまま
+Console の「ルール」タブに貼れば済む。** かさなり専用プロジェクトなので、
+かるたの分を併記する必要はない。
 
-**かさなり専用プロジェクトに入れる場合はそのまま貼れる。**
-karuta-game プロジェクトに入れる場合は、かるた用の
-`match /artifacts/karuta-v1/public/data/{document=**}` を消さずに併記すること。
+Firestore エミュレータ（ローカル・認証不要）で 22 項目を実行して確認済み。
 
-以下は同じ内容の抜粋。
+| 確かめたこと | 結果 |
+|---|---|
+| 予定づくり | ログイン済みだけ通る。匿名・未ログイン・他人を `ownerUid` に詐称する作成は拒否 |
+| 閲覧 | ログイン済み（匿名を含む）は読める。未ログインは読めない |
+| しめきり・予定の削除 | 主催者だけ |
+| 回答 | 匿名でも自分の文書は書ける。なりすまし・他人の書き換えは拒否 |
+| 回答の削除 | 本人と、予定の主催者だけ |
+| 想定外のパス | 書けない |
 
-いま入っているルールが appId をワイルドカードにしているなら、追加設定なしで動く。
+画面に「Firestore のルールで許可されていません」と出たら、ルールが未反映か
+貼り間違い。Console のルールエディタは構文エラーがあると公開を止めるので、
+壊れた状態で publish されることはない。
 
-```
-match /artifacts/{appId}/public/data/{document=**} {
-  allow read, write: if request.auth != null;
-}
-```
-
-キズナかるた用に appId を直書きしている場合は、`kasanari` も通るように広げる。
-画面に「Firestore のルールで許可されていません」と出たらこれが原因。
-
-なお上のルールは、ログインさえしていれば誰でもどの文書でも書き換えられる。
-他人の回答や予定を触られたくない場合は、かさなりの分だけ次のように締められる
-（アプリ側はこの順序でも通るように作ってある）。
-
-```
-match /artifacts/kasanari/public/data/events/{code} {
-  allow read: if request.auth != null;
-
-  // 予定づくりはログイン済み（匿名でない）だけ。アプリ側と同じ制限をサーバー側でも効かせる。
-  allow create: if request.auth != null
-                && request.auth.token.firebase.sign_in_provider != 'anonymous'
-                && request.resource.data.ownerUid == request.auth.uid;
-
-  allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
-
-  // 回答は匿名でも可。ただし自分の文書だけ。
-  match /responses/{uid} {
-    allow read: if request.auth != null;
-    allow write: if request.auth != null && request.auth.uid == uid;
-
-    // 主催者が予定を消すときは、集まった回答も消す必要がある。
-    // アプリは「回答 → 本体」の順に消すので、この get() は本体がある間に評価される。
-    allow delete: if request.auth != null
-      && get(/databases/$(database)/documents/artifacts/kasanari/public/data/events/$(code))
-           .data.ownerUid == request.auth.uid;
-  }
-}
-```
-
-**注意：これは追記であって置き換えではない。** キズナかるたのデータは
-`artifacts/karuta-v1/public/data/rooms/...` にあるので、上のルールだけに差し替えると
-かるたが動かなくなる。かるたの分（`match /artifacts/karuta-v1/public/data/{document=**}`）は
-必ず残すこと。
-
-なお、いまのところ Firestore のルールは触らなくても動く。まずは Authentication の
-2項目だけ入れて、かるたが今までどおり動くことを確かめてから検討すればよい。
+ルールを変えたときは、`kasanari/firestore.rules` も同じ内容に更新しておくこと。
+リポジトリ側が正本ではないが、次に触る人が現状を追えなくなる。

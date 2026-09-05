@@ -260,11 +260,13 @@ img.avatar{object-fit:cover;background:var(--field);display:block}
          └ responses/{uid}
    ============================================================ */
 const APP_ID = 'kasanari';
+// かさなり専用の Firebase プロジェクト。
+// かるた（karuta-game-c8fc8）とは別なので、ルールも無料枠も独立している。
+// Storage は使わないので storageBucket は持たない。
 const firebaseConfig = {
-  apiKey: "AIzaSyDNs1rwsKmY0MHbFhelmkm0J1AdALKsCPE",
-  authDomain: "karuta-game-c8fc8.firebaseapp.com",
-  projectId: "karuta-game-c8fc8",
-  storageBucket: "karuta-game-c8fc8.firebasestorage.app"
+  apiKey: "AIzaSyDYpJB6-_caUp4A2ysRwMmOmEzxpbNWj1I",
+  authDomain: "kasanari-9f071.firebaseapp.com",
+  projectId: "kasanari-9f071"
 };
 
 const SLOT = 5;

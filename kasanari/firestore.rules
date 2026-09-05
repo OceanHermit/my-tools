@@ -1,9 +1,8 @@
 rules_version = '2';
 
 // かさなり（https://oceanhermit.github.io/my-tools/kasanari/）用のルール。
-// かさなり専用の Firebase プロジェクトに入れる想定。
-// ※ karuta-game プロジェクトに入れる場合は、かるた用の
-//   match /artifacts/karuta-v1/public/data/{document=**} を消さずに併記すること。
+// 対象プロジェクト: kasanari-9f071 （かるたとは別プロジェクト）
+// Console の Firestore →「ルール」タブに、この中身をそのまま貼る。
 service cloud.firestore {
   match /databases/{database}/documents {
 
