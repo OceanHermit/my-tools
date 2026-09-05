@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// かさなり（https://oceanhermit.github.io/my-tools/kasanari/）用のルール。
+// かさなり専用の Firebase プロジェクトに入れる想定。
+// ※ karuta-game プロジェクトに入れる場合は、かるた用の
+//   match /artifacts/karuta-v1/public/data/{document=**} を消さずに併記すること。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /artifacts/kasanari/public/data/events/{code} {
+
+      // 予定はコードを知っていれば誰でも見られる（ログイン必須）
+      allow read: if request.auth != null;
+
+      // 予定づくりはログイン済みだけ。匿名では作れない。
+      // 作成者は必ず自分を ownerUid にする。
+      allow create: if request.auth != null
+                    && request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    && request.resource.data.ownerUid == request.auth.uid;
+
+      // しめきり・削除は主催者だけ
+      allow update, delete: if request.auth != null
+                            && resource.data.ownerUid == request.auth.uid;
+
+      match /responses/{uid} {
+        allow read: if request.auth != null;
+
+        // 回答は匿名でもできる。ただし自分の文書だけ。
+        allow write: if request.auth != null && request.auth.uid == uid;
+
+        // 主催者が予定を消すときは、集まった回答も消す必要がある。
+        // アプリは「回答 → 本体」の順に消すので、この get() は本体がある間に評価される。
+        allow delete: if request.auth != null
+          && get(/databases/$(database)/documents/artifacts/kasanari/public/data/events/$(code))
+               .data.ownerUid == request.auth.uid;
+      }
+    }
+  }
+}
