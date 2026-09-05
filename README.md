@@ -139,6 +139,13 @@ Google でログインすると uid がアカウントに固定されるので�
 縛られなくなる。匿名のまま回答した人が後からログインした場合は、
 Firebase のアカウント連携（`linkWithPopup`）で uid が変わらないため回答はそのまま残る。
 
+**匿名から連携したユーザーは、本体のプロフィールが空になる。**
+`linkWithPopup` で匿名ユーザーに Google を連携した場合、Firebase は
+`user.displayName` / `user.photoURL` を **null のまま**にする。名前と写真は
+`user.providerData[]` の側にだけ入る。本体だけを見ると、名前がメールアドレスになり
+アイコンも出ない。`profileOf()` が本体 → providerData → メールの順に拾い、
+`backfillProfile()` が `updateProfile` で本体にも書き戻している。
+
 **Google ログインを使うには Firebase Console 側の設定が要る。**
 匿名認証と違い、Google 認証は「承認済みドメイン」の制約を受ける。
 

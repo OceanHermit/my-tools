@@ -370,6 +370,33 @@ function syncUser(){
   return true;
 }
 
+/* 匿名ユーザーに linkWithPopup で連携した場合、Firebase はユーザー本体の
+   displayName / photoURL を空のままにする。中身は providerData の側にだけ入る。
+   本体 → providerData → メールアドレス、の順に拾う。 */
+function profileOf(u){
+  if(!u) return {name:'', photo:null};
+  let name = u.displayName || '', photo = u.photoURL || null;
+  for(const p of (u.providerData || [])){
+    if(!p) continue;
+    if(!name)  name  = p.displayName || '';
+    if(!photo) photo = p.photoURL || null;
+  }
+  return { name: name || u.email || '', photo };
+}
+
+/* 拾えたプロフィールをアカウント本体にも書き戻しておく。
+   次に開いたときは本体から素直に取れるようになる。 */
+async function backfillProfile(){
+  const u = firebase.auth().currentUser;
+  if(!u || u.isAnonymous || !u.updateProfile) return;
+  const pr = profileOf(u);
+  const patch = {};
+  if(!u.displayName && pr.name && pr.name!==u.email) patch.displayName = pr.name;
+  if(!u.photoURL && pr.photo) patch.photoURL = pr.photo;
+  if(!Object.keys(patch).length) return;
+  try{ await u.updateProfile(patch); }catch(e){}
+}
+
 function googleProvider(){
   const p = new firebase.auth.GoogleAuthProvider();
   p.setCustomParameters({prompt:'select_account'});
@@ -415,6 +442,7 @@ async function signIn(){
     // 匿名のまま回答した人は「連携」で入る。uid が変わらないので回答はそのまま残る。
     if(u && u.isAnonymous) await u.linkWithPopup(googleProvider());
     else await auth.signInWithPopup(googleProvider());
+    await backfillProfile();
     syncUser();
     await markProvider('google');
     adoptAccountName();
@@ -459,6 +487,7 @@ async function takeOver(cred){
     for(const c of carry){ try{ await evRef(c.code).collection('responses').doc(oldUid).set(c.data); }catch(e2){} }
     return toast(fbMessage(e));
   }
+  await backfillProfile();
   syncUser();
   for(const c of carry){
     try{ await evRef(c.code).collection('responses').doc(res.user.uid).set(Object.assign({}, c.data, {provider:'google'})); }catch(e){}
@@ -479,12 +508,14 @@ async function takeOver(cred){
 function adoptAccountName(){
   // onAuthStateChanged は非同期なので FB.* はまだ古いことがある。currentUser を直接見る。
   const u = firebase.auth().currentUser;
-  if(!A || !u || u.isAnonymous || !u.displayName) return;
+  if(!A || !u || u.isAnonymous) return;
+  const gname = profileOf(u).name;
+  if(!gname || gname===u.email) return;   // メールしか無いなら勝手に入れない
   const posted = (S.ev && S.ev.responses) ? S.ev.responses.find(r=>r.id===u.uid) : null;
   if(posted) return;
   const auto = lget('name','');
   if(A.name && A.name!==auto) return;
-  A.name = u.displayName;
+  A.name = gname;
 }
 
 /* 送信済みの回答にも、いまのログイン状態を反映しておく（✓表示を実態に合わせる） */
@@ -528,9 +559,10 @@ function acctHTML(){
       <button class="gbtn" id="gin">${GLOGO}<span>Google でログイン</span></button>
     </div>`;
   }
-  const name = (FB.user && (FB.user.displayName || FB.user.email)) || 'ログイン中';
+  const pr = profileOf(FB.user);
+  const name = pr.name || 'ログイン中';
   const ini = esc(name.trim().charAt(0));
-  const photo = FB.user && FB.user.photoURL;
+  const photo = pr.photo;
   // Google のプロフィール画像。referrerpolicy を付けないと 403 で落ちることがある。
   // 取れなかったときは頭文字にさし替える（bindAcct の onerror）。
   const av = photo
@@ -843,7 +875,7 @@ function answerHTML(ev){
   if(!A || A.code!==ev.code){
     // 名前の既定値は「前に出した自分の回答 → ログイン中のアカウント名 → この端末で覚えた名前」の順。
     // ログインしている人にまで、以前この端末で使った別人の名前を出さないようにする。
-    const gname = (!FB.isAnon && FB.user && FB.user.displayName) ? FB.user.displayName : '';
+    const gname = FB.isAnon ? '' : (profileOf(FB.user).name || '');
     A = { code:ev.code, name: mine? mine.name : (gname || lget('name','')), days:{} };
     for(const d of ev.dates){
       const src = mine && mine.days[d];
