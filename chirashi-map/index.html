@@ -1,0 +1,1927 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>チラシマップ — 配った区域を記録する</title>
+<meta name="description" content="チームでチラシを配る区域を決め、人ごとに分け、配った場所と配っていない場所を地図上で記録するツール。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=Zen+Kaku+Gothic+New:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --ink:#14182B;
+  --slate:#59627E;
+  --line:#D3D9E6;
+  --field:#EBEFF6;
+  --paper:#FFFFFF;
+  --bg:#E4E9F2;
+  --pulse:#2F5BFF;
+  --done:#1E7A5A;
+  --skip:#C9852B;
+  --todo:#98A1B8;
+  --danger:#B4453F;
+  --solid:#14182B;
+  --on-solid:#FFFFFF;
+  --card-shadow:0 1px 0 rgba(20,24,43,.05),0 8px 24px -18px rgba(20,24,43,.5);
+  --r:14px;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+h1,h2,h3,p{margin:0}
+button,input,select,textarea{font:inherit;color:inherit;margin:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:"Zen Kaku Gothic New",system-ui,sans-serif;
+  font-size:15px;line-height:1.7;
+  overscroll-behavior:none;
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.hide{display:none!important}
+
+/* ---------- 共通パーツ ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  border-radius:10px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer;
+}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--solid);color:var(--on-solid);border-color:var(--solid);font-weight:700}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--danger);border-color:#E7C4C2}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.on{background:var(--pulse);border-color:var(--pulse);color:#fff}
+input[type=text],input[type=number],select{
+  width:100%;border:1px solid var(--line);background:var(--field);
+  border-radius:10px;padding:10px 12px;font-size:15px;
+}
+label.fld{display:block;margin:12px 0 0}
+label.fld>span{display:block;font-size:12px;color:var(--slate);letter-spacing:.04em;margin-bottom:4px}
+.row{display:flex;gap:8px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.muted{color:var(--slate);font-size:12.5px}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:11.5px;
+  background:var(--field);color:var(--slate);letter-spacing:.03em}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--card-shadow)}
+.card+.card{margin-top:14px}
+.card h2{font-size:15px;font-weight:700;letter-spacing:.04em}
+
+/* ---------- ホーム ---------- */
+.screen{display:none}
+.screen.on{display:block}
+.page{max-width:640px;margin:0 auto;padding:0 16px 64px}
+header.top{padding:26px 0 16px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .mark{width:26px;height:26px;flex:none;border-radius:7px;background:var(--done);position:relative}
+.brand .mark::after{content:"";position:absolute;inset:6px 6px auto 6px;height:3px;border-radius:2px;background:#fff;
+  box-shadow:0 6px 0 rgba(255,255,255,.55)}
+.brand h1{font-size:21px;font-weight:900;letter-spacing:.12em}
+.tagline{margin:6px 0 0;font-size:12.5px;color:var(--slate)}
+.codein{letter-spacing:.34em;text-transform:uppercase;text-align:center;font-size:22px;font-weight:700}
+
+/* ---------- アプリ本体 ---------- */
+#app.on{display:flex;flex-direction:column;height:100dvh}
+#app.on .stack{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.topbar{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);
+  border-bottom:1px solid var(--line);flex:none;padding-top:max(8px,env(safe-area-inset-top))
+}
+.topbar .who{flex:1;min-width:0}
+.topbar .who b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .who span{font-size:11px;color:var(--slate);letter-spacing:.14em}
+.iconbtn{border:1px solid var(--line);background:var(--paper);border-radius:9px;width:34px;height:34px;
+  display:grid;place-items:center;cursor:pointer;flex:none;font-size:15px}
+
+#mapwrap{position:relative;flex:1 1 auto;min-height:180px}
+#map{position:absolute;inset:0;background:#dfe5ee}
+.maptools{position:absolute;right:10px;top:10px;z-index:600;display:flex;flex-direction:column;gap:6px}
+.maptools .iconbtn{box-shadow:0 2px 8px -4px rgba(20,24,43,.6)}
+.legend{position:absolute;left:10px;bottom:10px;z-index:600;background:rgba(255,255,255,.94);
+  border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:11.5px;display:flex;gap:10px;color:var(--slate)}
+.drawbar{position:absolute;left:10px;right:10px;top:10px;z-index:700;background:var(--paper);
+  border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--card-shadow)}
+.drawbar h3{font-size:13px;font-weight:700;margin-bottom:6px}
+.drawbar .muted{margin-bottom:8px}
+
+.panel{flex:0 0 auto;background:var(--paper);border-top:1px solid var(--line);
+  display:flex;flex-direction:column;max-height:56dvh}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1;border:0;background:transparent;padding:11px 4px;font-size:13.5px;font-weight:500;
+  color:var(--slate);cursor:pointer;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--solid)}
+.tabbody{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+.grabber{height:16px;display:grid;place-items:center;cursor:ns-resize;flex:none;touch-action:none}
+.grabber i{display:block;width:38px;height:4px;border-radius:2px;background:var(--line)}
+
+/* 区域・仲間の行 */
+.item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--paper)}
+.item+.item{margin-top:8px}
+.item.sel{border-color:var(--solid);box-shadow:0 0 0 1px var(--solid) inset}
+.item .hd{display:flex;align-items:center;gap:8px}
+.item .hd b{font-size:14px;font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:7px;border-radius:4px;background:var(--field);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--done);border-radius:4px;transition:width .25s}
+.sub{margin-top:8px;padding-left:12px;border-left:2px solid var(--field)}
+
+.sr{list-style:none;margin:0;padding:0}
+.sr li{border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;font-size:13.5px}
+.sr li+li{margin-top:6px}
+.sr li:hover{background:var(--field)}
+.sr li b{display:block;font-weight:700}
+.sr li span{color:var(--slate);font-size:12px}
+
+.banner{background:#FCF4E8;color:#7A5417;border:1px solid #EBD9B8;border-radius:12px;padding:10px 12px;font-size:12.5px}
+.banner+*{margin-top:12px}
+
+/* トースト */
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,12px);z-index:2000;
+  background:var(--solid);color:var(--on-solid);border-radius:11px;padding:10px 16px;font-size:13.5px;
+  opacity:0;pointer-events:none;transition:.2s;max-width:88vw;text-align:center}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* モーダル */
+#modal{position:fixed;inset:0;z-index:1500;background:rgba(20,24,43,.42);display:none;
+  align-items:center;justify-content:center;padding:18px}
+#modal.on{display:flex}
+#modal .box{background:var(--paper);border-radius:16px;padding:18px;max-width:420px;width:100%;
+  box-shadow:0 24px 60px -24px rgba(20,24,43,.7);max-height:86dvh;overflow:auto}
+#modal h2{font-size:16px;font-weight:700;margin-bottom:8px}
+#modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* 地図の描画中カーソル */
+.drawing .leaflet-container{cursor:crosshair}
+.leaflet-container{font:inherit}
+.unitlabel{background:transparent;border:0;box-shadow:none;font-size:10px;color:#14182B;text-shadow:0 0 3px #fff,0 0 3px #fff}
+
+@media (min-width:860px){
+  #app.on{flex-direction:row;height:100dvh}
+  #app.on .stack{min-width:0}
+  .panel{max-height:none;height:100dvh;width:380px;flex:none;border-top:0;border-left:1px solid var(--line)}
+  .grabber{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== ホーム ===================== -->
+<div id="home" class="screen on">
+  <div class="page">
+    <header class="top">
+      <div class="brand"><i class="mark"></i><h1>チラシマップ</h1></div>
+      <p class="tagline">配る区域を決めて人ごとに分け、配った所と残りを地図で残す。</p>
+    </header>
+
+    <div id="modeBanner" class="banner hide"></div>
+
+    <div class="card">
+      <h2>地区をつくる</h2>
+      <p class="muted" style="margin-top:4px">つくった人が管理者になります。合言葉コードを仲間に配って参加してもらいます。</p>
+      <label class="fld"><span>地区の名前</span><input type="text" id="newName" placeholder="例：秋のチラシ・東町"></label>
+      <label class="fld"><span>あなたの名前</span><input type="text" id="newMe" placeholder="例：山田"></label>
+      <div class="row" style="margin-top:14px"><button class="btn primary grow" id="btnCreate">つくる</button></div>
+    </div>
+
+    <div class="card">
+      <h2>合言葉コードで参加</h2>
+      <label class="fld"><span>コード（6文字）</span>
+        <input type="text" id="joinCode" class="codein mono" maxlength="6" placeholder="ABC123" autocapitalize="characters" autocomplete="off"></label>
+      <label class="fld"><span>あなたの名前</span><input type="text" id="joinMe" placeholder="例：佐藤"></label>
+      <div class="row" style="margin-top:14px"><button class="btn primary grow" id="btnJoin">参加する</button></div>
+    </div>
+
+    <div class="card hide" id="recentCard">
+      <h2>最近ひらいた地区</h2>
+      <div id="recentList" style="margin-top:10px"></div>
+    </div>
+
+    <p class="muted" style="margin-top:22px;text-align:center">
+      地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a> ／
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    </p>
+  </div>
+</div>
+
+<!-- ===================== アプリ ===================== -->
+<div id="app" class="screen">
+  <div class="stack">
+    <div class="topbar">
+      <button class="iconbtn" id="btnHome" title="ホームへ">‹</button>
+      <div class="who"><b id="pjName">—</b><span class="mono" id="pjCode"></span></div>
+      <button class="iconbtn" id="btnShare" title="コードを配る">⇪</button>
+      <button class="iconbtn" id="btnMenu" title="設定">⋯</button>
+    </div>
+
+    <div id="mapwrap">
+      <div id="map"></div>
+      <div class="maptools">
+        <button class="iconbtn" id="btnLocate" title="現在地">◎</button>
+        <button class="iconbtn" id="btnBase" title="地図の種類">▤</button>
+        <button class="iconbtn" id="btnFit" title="区域全体を表示">⤢</button>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="drawbar hide" id="drawbar">
+        <h3 id="drawTitle">区域を囲む</h3>
+        <p class="muted" id="drawHelp"></p>
+        <div class="row wrap">
+          <button class="btn sm" id="drawModeTap">点を置く</button>
+          <button class="btn sm" id="drawModeTrace">なぞる</button>
+          <button class="btn sm" id="drawSnap">道に合わせる：入</button>
+          <button class="btn sm" id="drawUndo">1つ戻す</button>
+          <span class="grow"></span>
+          <button class="btn sm" id="drawCancel">やめる</button>
+          <button class="btn sm primary" id="drawDone">決定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel">
+    <div class="grabber" id="grabber"><i></i></div>
+    <div class="tabs">
+      <button data-tab="mine" class="on">配る</button>
+      <button data-tab="areas">区域</button>
+      <button data-tab="mem">仲間</button>
+    </div>
+    <div class="tabbody" id="tab-mine"></div>
+    <div class="tabbody hide" id="tab-areas"></div>
+    <div class="tabbody hide" id="tab-mem"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modal"><div class="box" id="modalBox"></div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script>
+"use strict";
+
+/* =========================================================================
+   0. 設定
+   ========================================================================= */
+
+/* Firebase の設定。まだ用意していない間は下の PLACEHOLDER のままでよい。
+   その場合アプリは「この端末だけ」モードで動く（データは localStorage）。
+   本番では Firebase Console でつくったプロジェクトの値に差し替える。      */
+const firebaseConfig = {
+  apiKey:            "PLACEHOLDER",
+  authDomain:        "PLACEHOLDER.firebaseapp.com",
+  projectId:         "PLACEHOLDER",
+  storageBucket:     "PLACEHOLDER.firebasestorage.app",
+  messagingSenderId: "PLACEHOLDER",
+  appId:             "PLACEHOLDER"
+};
+const APP_ID   = "chirashi-map";
+const LS_PREFIX= "chirashi-map:";
+const HAS_FB   = firebaseConfig.apiKey !== "PLACEHOLDER";
+
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter"
+];
+const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+
+const MEMBER_COLORS = ["#2F5BFF","#1E7A5A","#C9852B","#8B44AD","#B4453F","#0E7C86","#5E6AD2","#A0522D"];
+
+/* 記録の状態 */
+const ST_TODO = 0, ST_DONE = 1, ST_SKIP = 2;
+const ST_LABEL = { 0:"未配布", 1:"配布済み", 2:"対象外" };
+const ST_COLOR = { 0:"#98A1B8", 1:"#1E7A5A", 2:"#C9852B" };
+
+/* =========================================================================
+   1. 小道具
+   ========================================================================= */
+const $  = (s,r)=> (r||document).querySelector(s);
+const $$ = (s,r)=> Array.from((r||document).querySelectorAll(s));
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+let toastTimer=null;
+function toast(msg, ms){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"), ms||2600);
+}
+function randCode(n){
+  const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s="";
+  const buf=new Uint32Array(n); (crypto||window.crypto).getRandomValues(buf);
+  for(let i=0;i<n;i++) s+=A[buf[i]%A.length];
+  return s;
+}
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+
+/* モーダル。resolve(true/false) を返す */
+function modal(html, opts){
+  opts = opts||{};
+  return new Promise(res=>{
+    const box=$("#modalBox");
+    box.innerHTML = html + '<div class="acts">'
+      + (opts.noCancel?"":'<button class="btn" data-x="0">'+esc(opts.cancel||"やめる")+'</button>')
+      + '<button class="btn primary" data-x="1">'+esc(opts.ok||"OK")+'</button></div>';
+    $("#modal").classList.add("on");
+    const close = v => { $("#modal").classList.remove("on"); box.innerHTML=""; res(v); };
+    box.querySelectorAll("[data-x]").forEach(b=> b.onclick = ()=> close(b.dataset.x==="1"));
+    $("#modal").onclick = e => { if(e.target.id==="modal" && !opts.noCancel) close(false); };
+    if(opts.onOpen) opts.onOpen(box);
+  });
+}
+
+/* =========================================================================
+   2. 幾何（緯度経度は [lat, lng] で統一）
+   ========================================================================= */
+const R_EARTH = 6378137;
+const toRad = d => d*Math.PI/180;
+
+function distM(a,b){
+  const dLat=toRad(b[0]-a[0]), dLng=toRad(b[1]-a[1]);
+  const la1=toRad(a[0]), la2=toRad(b[0]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;
+  return 2*R_EARTH*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+/* 局所平面（メートル）への射影。lat0 を基準にする */
+function projector(lat0){
+  const kx = Math.cos(toRad(lat0))*111320, ky = 110540;
+  return {
+    to:   p => [p[1]*kx, p[0]*ky],
+    back: q => [q[1]/ky, q[0]/kx]
+  };
+}
+function ringCenter(ring){
+  let la=0,ln=0; for(const p of ring){ la+=p[0]; ln+=p[1]; }
+  return [la/ring.length, ln/ring.length];
+}
+function bboxOf(ring){
+  let s=90,w=180,n=-90,e=-180;
+  for(const p of ring){ if(p[0]<s)s=p[0]; if(p[0]>n)n=p[0]; if(p[1]<w)w=p[1]; if(p[1]>e)e=p[1]; }
+  return {s,w,n,e};
+}
+function padBbox(b, m){
+  const dLat = m/110540, dLng = m/(Math.cos(toRad((b.s+b.n)/2))*111320);
+  return {s:b.s-dLat, w:b.w-dLng, n:b.n+dLat, e:b.e+dLng};
+}
+/* 面積（m^2）。等距円筒近似 */
+function areaM2(ring){
+  if(!ring || ring.length<3) return 0;
+  const c=ringCenter(ring), pr=projector(c[0]);
+  let a=0;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const p=pr.to(ring[i]), q=pr.to(ring[j]);
+    a += (q[0]+p[0])*(q[1]-p[1]);
+  }
+  return Math.abs(a/2);
+}
+function pointInRing(pt, ring){
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const yi=ring[i][0], xi=ring[i][1], yj=ring[j][0], xj=ring[j][1];
+    if((yi>pt[0])!==(yj>pt[0]) && pt[1] < (xj-xi)*(pt[0]-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+/* Douglas-Peucker（メートル指定） */
+function simplify(pts, tolM){
+  if(pts.length<3) return pts.slice();
+  const c=ringCenter(pts), pr=projector(c[0]);
+  const P=pts.map(pr.to);
+  const keep=new Array(P.length).fill(false);
+  keep[0]=keep[P.length-1]=true;
+  const stack=[[0,P.length-1]];
+  while(stack.length){
+    const [a,b]=stack.pop();
+    let best=-1, bd=tolM;
+    const ax=P[a][0],ay=P[a][1],bx=P[b][0],by=P[b][1];
+    const dx=bx-ax, dy=by-ay, L2=dx*dx+dy*dy;
+    for(let i=a+1;i<b;i++){
+      const px=P[i][0]-ax, py=P[i][1]-ay;
+      let t = L2>0 ? (px*dx+py*dy)/L2 : 0; t=clamp(t,0,1);
+      const ex=px-t*dx, ey=py-t*dy, d=Math.hypot(ex,ey);
+      if(d>bd){ bd=d; best=i; }
+    }
+    if(best>=0){ keep[best]=true; stack.push([a,best],[best,b]); }
+  }
+  return pts.filter((_,i)=>keep[i]);
+}
+/* Sutherland–Hodgman：任意の subject を凸の clip（矩形など）で切る */
+function clipRingByConvex(subject, clip){
+  let out = subject.slice();
+  const n=clip.length;
+  for(let i=0;i<n;i++){
+    const A=clip[i], B=clip[(i+1)%n];
+    const inp = out; out=[];
+    if(!inp.length) break;
+    const side = p => (B[1]-A[1])*(p[0]-A[0]) - (B[0]-A[0])*(p[1]-A[1]);
+    const inter = (p,q) => {
+      const sp=side(p), sq=side(q), t = sp/(sp-sq);
+      return [p[0]+(q[0]-p[0])*t, p[1]+(q[1]-p[1])*t];
+    };
+    for(let j=0;j<inp.length;j++){
+      const cur=inp[j], prev=inp[(j+inp.length-1)%inp.length];
+      const sc=side(cur), sp=side(prev);
+      if(sc>=0){ if(sp<0) out.push(inter(prev,cur)); out.push(cur); }
+      else if(sp>=0) out.push(inter(prev,cur));
+    }
+  }
+  return out;
+}
+/* 反時計回り（正の面積）に揃える。clipRingByConvex は向きに依存する */
+function ccw(ring){
+  let a=0;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++)
+    a += (ring[j][1]+ring[i][1])*(ring[j][0]-ring[i][0]);
+  return a>0 ? ring.slice().reverse() : ring.slice();
+}
+function rectRing(s,w,n,e){ return [[s,w],[s,e],[n,e],[n,w]]; }
+
+/* 線分列をポリゴンで切り、内側の断片だけ返す */
+function clipLineByRing(line, ring){
+  const out=[]; let cur=[];
+  for(let i=0;i<line.length-1;i++){
+    const p=line[i], q=line[i+1];
+    const ts=[0,1];
+    for(let k=0,j=ring.length-1;k<ring.length;j=k++){
+      const A=ring[j], B=ring[k];
+      const d1=[q[0]-p[0], q[1]-p[1]], d2=[B[0]-A[0], B[1]-A[1]];
+      const den = d1[1]*d2[0]-d1[0]*d2[1];
+      if(Math.abs(den)<1e-14) continue;
+      const t = ((A[1]-p[1])*d2[0]-(A[0]-p[0])*d2[1])/den;
+      const u = ((A[1]-p[1])*d1[0]-(A[0]-p[0])*d1[1])/den;
+      if(t>0 && t<1 && u>=0 && u<=1) ts.push(t);
+    }
+    ts.sort((a,b)=>a-b);
+    for(let k=0;k<ts.length-1;k++){
+      const t0=ts[k], t1=ts[k+1];
+      if(t1-t0 < 1e-9) continue;
+      const at = t => [p[0]+(q[0]-p[0])*t, p[1]+(q[1]-p[1])*t];
+      const mid = at((t0+t1)/2);
+      const a=at(t0), b=at(t1);
+      if(pointInRing(mid, ring)){
+        if(cur.length===0) cur.push(a);
+        cur.push(b);
+      }else{
+        if(cur.length>1) out.push(cur);
+        cur=[];
+      }
+    }
+  }
+  if(cur.length>1) out.push(cur);
+  return out;
+}
+function lineLenM(line){ let d=0; for(let i=0;i<line.length-1;i++) d+=distM(line[i],line[i+1]); return d; }
+/* 線を最大長 maxM ごとに切る */
+function chopLine(line, maxM){
+  const total=lineLenM(line);
+  if(total<=maxM) return [line];
+  const parts=Math.ceil(total/maxM), step=total/parts;
+  const out=[]; let cur=[line[0]], acc=0;
+  for(let i=0;i<line.length-1;i++){
+    let a=line[i], b=line[i+1], segd=distM(a,b);
+    while(acc+segd >= step-1e-9 && out.length<parts-1){
+      const need=step-acc, t=need/segd;
+      const cut=[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+      cur.push(cut); out.push(cur); cur=[cut];
+      a=cut; segd=distM(a,b); acc=0;
+    }
+    acc+=segd; cur.push(b);
+  }
+  if(cur.length>1) out.push(cur);
+  return out;
+}
+function fmtArea(m2){
+  if(m2>=1e6) return (m2/1e6).toFixed(2)+" km²";
+  if(m2>=1e4) return (m2/1e4).toFixed(1)+" ha";
+  return Math.round(m2)+" m²";
+}
+
+/* 面積が等しくなるように n 分割する。axis: "auto" | "ns" | "ew" */
+function splitRing(ring, n, axis){
+  if(n<=1) return [ring.slice()];
+  const R = ccw(ring), b = bboxOf(R), total = areaM2(R);
+  const widthM  = distM([ (b.s+b.n)/2, b.w ], [ (b.s+b.n)/2, b.e ]);
+  const heightM = distM([ b.s, (b.w+b.e)/2 ], [ b.n, (b.w+b.e)/2 ]);
+  const vertical = axis==="ew" ? true : axis==="ns" ? false : widthM>=heightM;
+  const pad = 0.002;
+  const lo = vertical ? b.w : b.s, hi = vertical ? b.e : b.n;
+  const bandTo = c => vertical
+    ? rectRing(b.s-pad, b.w-pad, b.n+pad, c)
+    : rectRing(b.s-pad, b.w-pad, c, b.e+pad);
+  const cumArea = c => areaM2(clipRingByConvex(R, bandTo(c)));
+
+  const cuts=[];
+  for(let i=1;i<n;i++){
+    const target = total*i/n;
+    let a=lo, z=hi;
+    for(let k=0;k<28;k++){
+      const m=(a+z)/2;
+      if(cumArea(m) < target) a=m; else z=m;
+    }
+    cuts.push((a+z)/2);
+  }
+  const edges=[lo-pad, ...cuts, hi+pad];
+  const out=[];
+  for(let i=0;i<n;i++){
+    const win = vertical
+      ? rectRing(b.s-pad, edges[i], b.n+pad, edges[i+1])
+      : rectRing(edges[i], b.w-pad, edges[i+1], b.e+pad);
+    const piece = clipRingByConvex(R, win);
+    if(piece.length>=3) out.push(simplify(piece, 1.5));
+  }
+  return out;
+}
+
+/* =========================================================================
+   3. 外部データ（Nominatim / Overpass）
+   ========================================================================= */
+async function fetchJSON(url, opts, ms){
+  const ac = new AbortController();
+  const to = setTimeout(()=>ac.abort(), ms||30000);
+  try{
+    const r = await fetch(url, Object.assign({signal:ac.signal}, opts||{}));
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } finally { clearTimeout(to); }
+}
+
+let lastNominatim = 0;
+async function geoSearch(q){
+  const wait = 1100 - (Date.now()-lastNominatim);
+  if(wait>0) await sleep(wait);
+  lastNominatim = Date.now();
+  const url = NOMINATIM + "?format=jsonv2&polygon_geojson=1&addressdetails=1&limit=8"
+            + "&accept-language=ja&countrycodes=jp&q=" + encodeURIComponent(q);
+  const rows = await fetchJSON(url, {headers:{"Accept":"application/json"}}, 20000);
+  return rows.map(r=>{
+    let ring=null;
+    const g=r.geojson;
+    if(g && g.type==="Polygon") ring = g.coordinates[0].map(c=>[c[1],c[0]]);
+    else if(g && g.type==="MultiPolygon"){
+      let best=null, ba=-1;
+      for(const poly of g.coordinates){
+        const rr = poly[0].map(c=>[c[1],c[0]]);
+        const a = areaM2(rr); if(a>ba){ ba=a; best=rr; }
+      }
+      ring=best;
+    }
+    return {
+      name: r.display_name,
+      short: (r.name || r.display_name.split(",")[0]),
+      kind: r.type,
+      lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+      bb: r.boundingbox ? r.boundingbox.map(Number) : null,   // [s,n,w,e]
+      ring: ring && ring.length>=4 ? simplify(ring, 3) : null
+    };
+  });
+}
+
+async function overpass(query){
+  let lastErr=null;
+  for(const ep of OVERPASS){
+    try{
+      return await fetchJSON(ep, {
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:"data="+encodeURIComponent(query)
+      }, 60000);
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr || new Error("Overpass に届きませんでした");
+}
+
+const ROAD_FILTER = '["highway"]["highway"!~"^(motorway|motorway_link|trunk|trunk_link|construction|proposed|raceway|bus_guideway|escape|elevator|corridor)$"]["area"!="yes"]';
+
+async function fetchRoads(bb){
+  const q = `[out:json][timeout:50];way${ROAD_FILTER}(${bb.s},${bb.w},${bb.n},${bb.e});out body geom;`;
+  const j = await overpass(q);
+  return (j.elements||[]).filter(e=>e.type==="way" && e.geometry && e.geometry.length>1).map(e=>({
+    id:e.id,
+    name:(e.tags&&(e.tags["name"]||e.tags["name:ja"]))||"",
+    hw:(e.tags&&e.tags.highway)||"",
+    nodes:e.nodes||[],
+    geom:e.geometry.map(g=>[g.lat,g.lon])
+  }));
+}
+async function fetchBuildings(bb){
+  const q = `[out:json][timeout:60];(way["building"](${bb.s},${bb.w},${bb.n},${bb.e});relation["building"](${bb.s},${bb.w},${bb.n},${bb.e}););out center;`;
+  const j = await overpass(q);
+  const out=[];
+  for(const e of (j.elements||[])){
+    const c = e.center || (e.type==="node" ? {lat:e.lat, lon:e.lon} : null);
+    if(!c) continue;
+    const t=e.tags||{};
+    out.push({
+      id:e.type[0]+e.id, lat:c.lat, lng:c.lon,
+      name: t["name"] || t["addr:housename"] || "",
+      addr: [t["addr:block_number"], t["addr:housenumber"]].filter(Boolean).join("-"),
+      kind: t.building || "yes",
+      units: parseInt(t["building:flats"]||t["flats"]||"",10) || 0
+    });
+  }
+  return out;
+}
+
+/* =========================================================================
+   4. 道へのスナップ（描いた線を道路網に沿わせる）
+   ========================================================================= */
+function buildRoadGraph(ways){
+  const key = p => p[0].toFixed(6)+","+p[1].toFixed(6);
+  const idOf = new Map(); const pts=[]; const adj=[];
+  const nid = p => {
+    const k=key(p); let i=idOf.get(k);
+    if(i===undefined){ i=pts.length; idOf.set(k,i); pts.push(p); adj.push([]); }
+    return i;
+  };
+  for(const w of ways){
+    let prev=nid(w.geom[0]);
+    for(let i=1;i<w.geom.length;i++){
+      const cur=nid(w.geom[i]);
+      if(cur!==prev){
+        const d=distM(pts[prev],pts[cur]);
+        adj[prev].push({t:cur,w:d}); adj[cur].push({t:prev,w:d});
+      }
+      prev=cur;
+    }
+  }
+  return {pts, adj};
+}
+function nearestNode(g, p){
+  let bi=-1, bd=Infinity;
+  for(let i=0;i<g.pts.length;i++){
+    const q=g.pts[i];
+    const d=(q[0]-p[0])*(q[0]-p[0]) + (q[1]-p[1])*(q[1]-p[1])*0.66;
+    if(d<bd){ bd=d; bi=i; }
+  }
+  return bi;
+}
+/* A*。maxCost を超えたら諦める */
+function routeBetween(g, a, b, maxCost){
+  if(a===b) return [a];
+  const N=g.pts.length;
+  const dist=new Float64Array(N).fill(Infinity);
+  const prev=new Int32Array(N).fill(-1);
+  const seen=new Uint8Array(N);
+  const h = i => distM(g.pts[i], g.pts[b]);
+  const heap=[{i:a,f:h(a)}]; dist[a]=0;
+  const push=x=>{ heap.push(x); let i=heap.length-1;
+    while(i>0){ const p=(i-1)>>1; if(heap[p].f<=heap[i].f) break; [heap[p],heap[i]]=[heap[i],heap[p]]; i=p; } };
+  const pop=()=>{ const top=heap[0], last=heap.pop();
+    if(heap.length){ heap[0]=last; let i=0;
+      for(;;){ const l=2*i+1,r=l+1; let m=i;
+        if(l<heap.length&&heap[l].f<heap[m].f)m=l;
+        if(r<heap.length&&heap[r].f<heap[m].f)m=r;
+        if(m===i)break; [heap[m],heap[i]]=[heap[i],heap[m]]; i=m; } }
+    return top; };
+  let guard=0;
+  while(heap.length){
+    if(++guard > 400000) break;
+    const cur=pop(); if(seen[cur.i]) continue; seen[cur.i]=1;
+    if(cur.i===b) break;
+    if(dist[cur.i] > maxCost) break;
+    for(const e of g.adj[cur.i]){
+      const nd=dist[cur.i]+e.w;
+      if(nd<dist[e.t]){ dist[e.t]=nd; prev[e.t]=cur.i; push({i:e.t, f:nd+h(e.t)}); }
+    }
+  }
+  if(!seen[b] || dist[b]>maxCost) return null;
+  const path=[]; for(let i=b;i!==-1;i=prev[i]) path.push(i);
+  return path.reverse();
+}
+/* 描いたリングを道に沿わせる。失敗した区間は直線のまま残す */
+function snapRingToRoads(ring, ways){
+  const g = buildRoadGraph(ways);
+  if(g.pts.length<4) return {ring:ring, snapped:0, total:1};
+  const anchors = simplify(ring, 22).slice(0, 80);
+  if(anchors.length<3) return {ring:ring, snapped:0, total:1};
+  const out=[]; let ok=0, total=0;
+  for(let i=0;i<anchors.length;i++){
+    const a=anchors[i], b=anchors[(i+1)%anchors.length];
+    total++;
+    const na=nearestNode(g,a), nb=nearestNode(g,b);
+    const straight=distM(a,b);
+    const budget=Math.max(300, straight*2.6);
+    const path = (na>=0&&nb>=0) ? routeBetween(g,na,nb,budget) : null;
+    if(path && path.length>1){
+      ok++;
+      for(const idx of path){
+        const p=g.pts[idx];
+        if(!out.length || distM(out[out.length-1],p)>0.4) out.push(p);
+      }
+    }else{
+      if(!out.length || distM(out[out.length-1],a)>0.4) out.push(a);
+      out.push(b);
+    }
+  }
+  const cleaned = simplify(out, 1.2);
+  return {ring: cleaned.length>=3 ? cleaned : ring, snapped:ok, total};
+}
+
+/* =========================================================================
+   5. 記録の単位をつくる
+   ========================================================================= */
+
+/* 道路：交差点で切り、区域で切り、長すぎる区間はさらに分ける */
+async function genRoadUnits(ring, onProgress){
+  const bb = padBbox(bboxOf(ring), 120);
+  onProgress && onProgress("道路を取り寄せています…");
+  const ways = await fetchRoads(bb);
+  onProgress && onProgress("道路を区切っています…");
+  const useCount = new Map();
+  for(const w of ways) for(const nd of w.nodes) useCount.set(nd, (useCount.get(nd)||0)+1);
+
+  const units=[]; let i=0;
+  for(const w of ways){
+    /* 交差点で分割 */
+    const pieces=[]; let cur=[w.geom[0]];
+    for(let k=1;k<w.geom.length;k++){
+      cur.push(w.geom[k]);
+      const isEnd = k===w.geom.length-1;
+      const isCross = w.nodes[k]!==undefined && (useCount.get(w.nodes[k])||0)>1;
+      if(isCross && !isEnd){ pieces.push(cur); cur=[w.geom[k]]; }
+    }
+    if(cur.length>1) pieces.push(cur);
+
+    for(const piece of pieces){
+      for(const seg of clipLineByRing(piece, ring)){
+        for(const part of chopLine(seg, 160)){
+          const len = lineLenM(part);
+          if(len < 8) continue;
+          units.push({ id:"r"+(i++), t:"road", n:w.name, hw:w.hw, m:Math.round(len), g:part.map(roundPt) });
+        }
+      }
+    }
+  }
+  return units;
+}
+const roundPt = p => [ +p[0].toFixed(6), +p[1].toFixed(6) ];
+
+/* 区画：格子で切る */
+function genBlockUnits(ring, sizeM){
+  const R = ccw(ring), b = bboxOf(R);
+  const dLat = sizeM/110540;
+  const dLng = sizeM/(Math.cos(toRad((b.s+b.n)/2))*111320);
+  const units=[]; let i=0;
+  const cols = Math.ceil((b.e-b.w)/dLng), rows = Math.ceil((b.n-b.s)/dLat);
+  if(cols*rows > 6000) throw new Error("区画が細かすぎます。もっと大きい区画にするか、区域を分けてください。");
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      const s=b.s+r*dLat, w=b.w+c*dLng;
+      const cell = rectRing(s, w, Math.min(s+dLat,b.n+dLat), Math.min(w+dLng,b.e+dLng));
+      const piece = clipRingByConvex(R, cell);
+      if(piece.length<3) continue;
+      const a = areaM2(piece);
+      if(a < sizeM*sizeM*0.06) continue;
+      units.push({ id:"b"+(i++), t:"block", m:Math.round(a),
+                   n:String.fromCharCode(65+(c%26))+(rows-r),
+                   g:simplify(piece,1).map(roundPt) });
+    }
+  }
+  return units;
+}
+
+/* 建物：中心点をピンにする */
+async function genPinUnits(ring, onProgress){
+  const bb = padBbox(bboxOf(ring), 40);
+  onProgress && onProgress("建物を取り寄せています…");
+  const all = await fetchBuildings(bb);
+  const units=[]; let i=0;
+  for(const b of all){
+    if(!pointInRing([b.lat,b.lng], ring)) continue;
+    units.push({ id:"p"+(i++), t:"pin", n:b.name||b.addr||"", k:b.kind, u:b.units,
+                 g:[roundPt([b.lat,b.lng])] });
+  }
+  return units;
+}
+
+async function generateUnits(area, mode, opts, onProgress){
+  const ring = area.ring;
+  if(!ring || ring.length<3) throw new Error("区域の形がありません");
+  const a = areaM2(ring);
+  if(a > 12e6) throw new Error("区域が広すぎます（"+fmtArea(a)+"）。分けてから作ってください。");
+  if(mode==="road")  return await genRoadUnits(ring, onProgress);
+  if(mode==="block") return genBlockUnits(ring, (opts&&opts.gridSize)||80);
+  if(mode==="pin")   return await genPinUnits(ring, onProgress);
+  throw new Error("不明な単位です");
+}
+
+/* =========================================================================
+   6. データの保存（Firebase / この端末だけ）
+   ========================================================================= */
+const CHUNK = 600000;
+
+const Local = {
+  key: c => LS_PREFIX+"pj:"+c,
+  read(c){ try{ return JSON.parse(localStorage.getItem(Local.key(c))||"null"); }catch(e){ return null; } },
+  write(c,v){ localStorage.setItem(Local.key(c), JSON.stringify(v));
+              window.dispatchEvent(new CustomEvent("local-store", {detail:{code:c}})); },
+  blank(){ return {project:null, members:{}, areas:{}, units:{}, stat:{}}; }
+};
+
+const Store = {
+  remote: HAS_FB, uid:null, db:null, fbError:null,
+
+  initLocal(){
+    this.remote = false;
+    this.uid = localStorage.getItem(LS_PREFIX+"uid");
+    if(!this.uid){ this.uid = "local-"+randCode(10).toLowerCase(); localStorage.setItem(LS_PREFIX+"uid", this.uid); }
+  },
+  async init(){
+    if(!HAS_FB){ this.initLocal(); return; }
+    if(typeof firebase==="undefined"){ this.fbError="Firebase を読み込めませんでした"; this.initLocal(); return; }
+    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    this.db = firebase.firestore();
+    try{ await this.db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* 併用タブなどでは無効。動作には支障なし */ }
+    const auth = firebase.auth();
+    await new Promise((res)=>{
+      const off = auth.onAuthStateChanged(u=>{ if(u){ this.uid=u.uid; off(); res(); } });
+      auth.signInAnonymously().catch(e=>{
+        this.fbError = e.code==="auth/operation-not-allowed"
+          ? "Firebase 側で匿名ログインが有効になっていません" : (e.message||String(e));
+        off(); this.initLocal(); res();
+      });
+    });
+  },
+
+  base(code){ return this.db.collection("artifacts").doc(APP_ID)
+      .collection("public").doc("data").collection("projects").doc(code); },
+
+  /* --- プロジェクト --- */
+  async createProject(name, myName){
+    const code = randCode(6);
+    const pj = { name, ownerUid:this.uid, created:todayStr(), appVer:1 };
+    const me = { name:myName, color:MEMBER_COLORS[0], admin:true, joined:todayStr() };
+    if(this.remote){
+      await this.base(code).set(pj);
+      await this.base(code).collection("members").doc(this.uid).set(me);
+    }else{
+      const d=Local.blank(); d.project=Object.assign({code},pj); d.members[this.uid]=me; Local.write(code,d);
+    }
+    return {code};
+  },
+  async getProject(code){
+    if(this.remote){ const s=await this.base(code).get(); return s.exists ? Object.assign({code}, s.data()) : null; }
+    const d=Local.read(code); return d && d.project ? d.project : null;
+  },
+  async joinProject(code, myName){
+    const pj = await this.getProject(code);
+    if(!pj) return null;
+    if(this.remote){
+      const ref=this.base(code).collection("members").doc(this.uid);
+      const cur=await ref.get();
+      const n = cur.exists ? (cur.data().color||MEMBER_COLORS[0]) : null;
+      const cnt = (await this.base(code).collection("members").get()).size;
+      await ref.set({ name:myName, color:n||MEMBER_COLORS[cnt%MEMBER_COLORS.length],
+                      admin: cur.exists ? !!cur.data().admin : (pj.ownerUid===this.uid), joined:todayStr() }, {merge:true});
+    }else{
+      const d=Local.read(code)||Local.blank();
+      const cnt=Object.keys(d.members).length;
+      const cur=d.members[this.uid]||{};
+      d.members[this.uid]=Object.assign({}, cur, {name:myName, color:cur.color||MEMBER_COLORS[cnt%MEMBER_COLORS.length],
+        admin: cur.admin!==undefined ? cur.admin : (pj.ownerUid===this.uid), joined:todayStr()});
+      Local.write(code,d);
+    }
+    return pj;
+  },
+  async setMember(code, uid, patch){
+    if(this.remote) await this.base(code).collection("members").doc(uid).set(patch,{merge:true});
+    else { const d=Local.read(code); d.members[uid]=Object.assign({}, d.members[uid]||{}, patch); Local.write(code,d); }
+  },
+
+  /* --- 監視 --- */
+  watch(code, cb){
+    if(this.remote){
+      const offs=[];
+      let pj=null, members={}, areas={};
+      const fire=()=>cb({project:pj, members, areas});
+      offs.push(this.base(code).onSnapshot(s=>{ pj = s.exists?Object.assign({code},s.data()):null; fire(); }));
+      offs.push(this.base(code).collection("members").onSnapshot(s=>{
+        members={}; s.forEach(d=>members[d.id]=d.data()); fire(); }));
+      offs.push(this.base(code).collection("areas").onSnapshot(s=>{
+        areas={}; s.forEach(d=>areas[d.id]=Object.assign({id:d.id}, d.data())); fire(); }));
+      return ()=>offs.forEach(f=>f());
+    }
+    const emit=()=>{ const d=Local.read(code)||Local.blank();
+      const areas={}; for(const k in d.areas) areas[k]=Object.assign({id:k}, d.areas[k]);
+      cb({project:d.project, members:d.members, areas}); };
+    const h=e=>{ if(e.detail.code===code) emit(); };
+    window.addEventListener("local-store", h);
+    emit();
+    return ()=>window.removeEventListener("local-store", h);
+  },
+
+  /* --- 区域 --- */
+  async saveArea(code, area){
+    const id = area.id || ("a"+Date.now().toString(36)+randCode(3).toLowerCase());
+    const doc = {
+      name: area.name||"", parent: area.parent||"", uid: area.uid||"",
+      mode: area.mode||"road", grid: area.grid||80, color: area.color||"",
+      ringJson: JSON.stringify((area.ring||[]).map(roundPt)),
+      updated: todayStr()
+    };
+    if(this.remote) await this.base(code).collection("areas").doc(id).set(doc,{merge:true});
+    else { const d=Local.read(code); d.areas[id]=Object.assign({}, d.areas[id]||{}, doc); Local.write(code,d); }
+    return id;
+  },
+  async deleteArea(code, id){
+    if(this.remote){
+      for(const sub of ["geom","stat"]){
+        const s=await this.base(code).collection("areas").doc(id).collection(sub).get();
+        const batch=this.db.batch(); s.forEach(d=>batch.delete(d.ref)); await batch.commit();
+      }
+      await this.base(code).collection("areas").doc(id).delete();
+    }else{
+      const d=Local.read(code); delete d.areas[id];
+      for(const k of Object.keys(d.units)) if(k.startsWith(id+"|")) delete d.units[k];
+      for(const k of Object.keys(d.stat))  if(k.startsWith(id+"|")) delete d.stat[k];
+      Local.write(code,d);
+    }
+  },
+
+  /* --- 単位（形） --- */
+  async saveUnits(code, areaId, mode, units){
+    const json = JSON.stringify(units);
+    const parts=[]; for(let i=0;i<json.length;i+=CHUNK) parts.push(json.slice(i,i+CHUNK));
+    if(this.remote){
+      const col=this.base(code).collection("areas").doc(areaId).collection("geom");
+      const old=await col.get();
+      const batch=this.db.batch();
+      old.forEach(d=>{ if(d.id.startsWith(mode+"_")) batch.delete(d.ref); });
+      parts.forEach((p,i)=> batch.set(col.doc(mode+"_"+i), {j:p, i}));
+      batch.set(col.doc(mode+"_meta"), {n:parts.length, count:units.length, at:todayStr()});
+      await batch.commit();
+    }else{
+      const d=Local.read(code); d.units[areaId+"|"+mode]=units; Local.write(code,d);
+    }
+  },
+  async loadUnits(code, areaId, mode){
+    if(this.remote){
+      const col=this.base(code).collection("areas").doc(areaId).collection("geom");
+      const meta=await col.doc(mode+"_meta").get();
+      if(!meta.exists) return null;
+      const n=meta.data().n||0; let json="";
+      for(let i=0;i<n;i++){ const s=await col.doc(mode+"_"+i).get(); if(!s.exists) return null; json+=s.data().j; }
+      try{ return JSON.parse(json); }catch(e){ return null; }
+    }
+    const d=Local.read(code); return (d && d.units[areaId+"|"+mode]) || null;
+  },
+
+  /* --- 記録（状態） --- */
+  shardOf(unitId){ const m=/^[a-z](\d+)$/.exec(unitId); return Math.floor((m?+m[1]:0)/900); },
+  async setStatus(code, areaId, mode, unitId, val, byName){
+    const rec = {s:val, b:this.uid, bn:byName||"", t:Date.now()};
+    if(this.remote){
+      const ref=this.base(code).collection("areas").doc(areaId).collection("stat")
+                 .doc(mode+"_"+this.shardOf(unitId));
+      ref.set({p:{[unitId]:rec}}, {merge:true});   /* 待たない：オフラインでも即座に反映される */
+    }else{
+      const d=Local.read(code), k=areaId+"|"+mode;
+      d.stat[k]=d.stat[k]||{}; d.stat[k][unitId]=rec; Local.write(code,d);
+    }
+  },
+  async setStatusMany(code, areaId, mode, entries, byName){
+    if(!entries.length) return;
+    if(this.remote){
+      const groups={};
+      for(const [uid,val] of entries){ const sh=this.shardOf(uid); (groups[sh]=groups[sh]||{})[uid]={s:val,b:this.uid,bn:byName||"",t:Date.now()}; }
+      const batch=this.db.batch();
+      for(const sh in groups)
+        batch.set(this.base(code).collection("areas").doc(areaId).collection("stat").doc(mode+"_"+sh), {p:groups[sh]}, {merge:true});
+      await batch.commit();
+    }else{
+      const d=Local.read(code), k=areaId+"|"+mode; d.stat[k]=d.stat[k]||{};
+      for(const [uid,val] of entries) d.stat[k][uid]={s:val,b:this.uid,bn:byName||"",t:Date.now()};
+      Local.write(code,d);
+    }
+  },
+  watchStatus(code, areaId, mode, cb){
+    if(this.remote){
+      return this.base(code).collection("areas").doc(areaId).collection("stat").onSnapshot(s=>{
+        const out={};
+        s.forEach(d=>{ if(!d.id.startsWith(mode+"_")) return; Object.assign(out, d.data().p||{}); });
+        cb(out);
+      });
+    }
+    const emit=()=>{ const d=Local.read(code)||Local.blank(); cb(Object.assign({}, d.stat[areaId+"|"+mode]||{})); };
+    const h=e=>{ if(e.detail.code===code) emit(); };
+    window.addEventListener("local-store", h); emit();
+    return ()=>window.removeEventListener("local-store", h);
+  }
+};
+
+/* 最近ひらいた地区 */
+function recents(){ try{ return JSON.parse(localStorage.getItem(LS_PREFIX+"recent")||"[]"); }catch(e){ return []; } }
+function pushRecent(code, name){
+  const list = recents().filter(r=>r.code!==code);
+  list.unshift({code, name, at:todayStr()});
+  localStorage.setItem(LS_PREFIX+"recent", JSON.stringify(list.slice(0,8)));
+}
+
+/* =========================================================================
+   7. 画面の状態
+   ========================================================================= */
+const S = {
+  code:null, project:null, members:{}, areas:{}, uid:null,
+  tab:"mine", activeAreaId:null, mode:"road",
+  units:[], stat:{}, unitLayers:{},
+  off:null, offStat:null,
+  autoWalk:false, pos:null, posAcc:0,
+  busy:false
+};
+const meMember = () => S.members[S.uid] || {name:"（あなた）", color:MEMBER_COLORS[0], admin:false};
+const isAdmin  = () => !!(meMember().admin) || (S.project && S.project.ownerUid===S.uid);
+const areaList = () => Object.values(S.areas);
+const childrenOf = pid => areaList().filter(a=>a.parent===pid).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
+const parents   = () => areaList().filter(a=>!a.parent).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
+const ringOf = a => { try{ return JSON.parse(a.ringJson||"[]"); }catch(e){ return []; } };
+const memberColor = uid => (S.members[uid] && S.members[uid].color) || "#98A1B8";
+const memberName  = uid => (S.members[uid] && S.members[uid].name) || "未割り当て";
+
+/* =========================================================================
+   8. 地図
+   ========================================================================= */
+let map, gArea, gUnit, gDraw, meMarker, meCircle;
+const BASES = {};
+let baseName = localStorage.getItem(LS_PREFIX+"base") || "pale";
+
+function initMap(){
+  map = L.map("map", {preferCanvas:true, zoomControl:false, attributionControl:true, tap:true})
+        .setView([35.681, 139.767], 15);
+  L.control.zoom({position:"bottomright"}).addTo(map);
+  const gsiAttr = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a>';
+  const osmAttr = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>';
+  BASES.pale = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {maxZoom:19, attribution:gsiAttr});
+  BASES.std  = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png",  {maxZoom:19, attribution:gsiAttr});
+  BASES.photo= L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", {maxZoom:18, attribution:gsiAttr});
+  BASES.osm  = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:osmAttr});
+  (BASES[baseName]||BASES.pale).addTo(map);
+  gArea = L.layerGroup().addTo(map);
+  gUnit = L.layerGroup().addTo(map);
+  gDraw = L.layerGroup().addTo(map);
+}
+function setBase(n){
+  for(const k in BASES) if(map.hasLayer(BASES[k])) map.removeLayer(BASES[k]);
+  BASES[n].addTo(map); baseName=n; localStorage.setItem(LS_PREFIX+"base", n);
+  BASES[n].bringToBack && BASES[n].bringToBack();
+}
+function fitRing(ring, pad){
+  if(!ring || !ring.length) return;
+  map.fitBounds(L.latLngBounds(ring.map(p=>L.latLng(p[0],p[1]))), {padding:[pad||24,pad||24]});
+}
+
+/* --- 区域を描く --- */
+function drawAreas(){
+  gArea.clearLayers();
+  for(const a of parents()){
+    const ring=ringOf(a); if(ring.length<3) continue;
+    const sel = S.activeAreaId===a.id;
+    L.polygon(ring, {color:"#14182B", weight:sel?3:2, opacity:.75, dashArray:"7 5",
+                     fill:true, fillOpacity:0.02, interactive:true})
+      .on("click", ()=>selectArea(a.id))
+      .addTo(gArea);
+  }
+  for(const a of areaList().filter(x=>x.parent)){
+    const ring=ringOf(a); if(ring.length<3) continue;
+    const c = a.uid ? memberColor(a.uid) : "#98A1B8";
+    const sel = S.activeAreaId===a.id;
+    const poly = L.polygon(ring, {color:c, weight:sel?4:2, opacity:sel?1:.85,
+                     fillColor:c, fillOpacity: sel?0.07:0.16, interactive:true})
+      .on("click", ()=>selectArea(a.id))
+      .addTo(gArea);
+    poly.bindTooltip((a.name||"区画")+"／"+memberName(a.uid), {direction:"center", className:"unitlabel"});
+  }
+}
+
+/* --- 単位を描く --- */
+function drawUnits(){
+  gUnit.clearLayers(); S.unitLayers={};
+  const area = S.areas[S.activeAreaId];
+  if(!area || !S.units.length) return;
+  for(const u of S.units){
+    const st = (S.stat[u.id] && S.stat[u.id].s) || ST_TODO;
+    const col = ST_COLOR[st];
+    let layer;
+    if(u.t==="road"){
+      layer = L.polyline(u.g, {color:col, weight: st===ST_TODO?5:7, opacity: st===ST_TODO?.75:.92, lineCap:"round"});
+    }else if(u.t==="block"){
+      layer = L.polygon(u.g, {color:col, weight:1.2, opacity:.9, fillColor:col, fillOpacity: st===ST_TODO?0.12:0.42});
+    }else{
+      layer = L.circleMarker(u.g[0], {radius: st===ST_TODO?5:6, color:"#fff", weight:1.4,
+                                      fillColor:col, fillOpacity:1});
+    }
+    layer.on("click", e=>{ L.DomEvent.stop(e); tapUnit(u.id); });
+    layer.addTo(gUnit);
+    S.unitLayers[u.id]=layer;
+  }
+}
+function restyleUnit(u){
+  const layer=S.unitLayers[u.id]; if(!layer) return;
+  const st=(S.stat[u.id] && S.stat[u.id].s)||ST_TODO, col=ST_COLOR[st];
+  if(u.t==="road") layer.setStyle({color:col, weight: st===ST_TODO?5:7, opacity: st===ST_TODO?.75:.92});
+  else if(u.t==="block") layer.setStyle({color:col, fillColor:col, fillOpacity: st===ST_TODO?0.12:0.42});
+  else layer.setStyle({fillColor:col});
+}
+
+/* =========================================================================
+   9. 囲って描く
+   ========================================================================= */
+const Draw = {
+  on:false, kind:"tap", snap:true, pts:[], line:null, verts:[], cb:null, tracing:false,
+  start(opts){
+    this.on=true; this.kind="tap"; this.pts=[]; this.cb=opts.onDone;
+    this.snap = opts.snap!==false;
+    $("#drawbar").classList.remove("hide");
+    $("#drawTitle").textContent = opts.title||"区域を囲む";
+    $("#drawHelp").textContent  = opts.help||"地図をタップして角を置き、最後に「決定」。「なぞる」に切り替えると指でなぞれます。";
+    document.body.classList.add("drawing");
+    this.paint(); this.syncBtns();
+    map.on("click", this._click, this);
+    map.getContainer().addEventListener("pointerdown", this._down, true);
+  },
+  syncBtns(){
+    $("#drawModeTap").classList.toggle("on", this.kind==="tap");
+    $("#drawModeTrace").classList.toggle("on", this.kind==="trace");
+    $("#drawSnap").classList.toggle("on", this.snap);
+    $("#drawSnap").textContent = "道に合わせる："+(this.snap?"入":"切");
+  },
+  setKind(k){
+    this.kind=k;
+    if(k==="trace"){ map.dragging.disable(); map.doubleClickZoom.disable(); }
+    else { map.dragging.enable(); map.doubleClickZoom.enable(); }
+    this.syncBtns();
+    $("#drawHelp").textContent = k==="trace"
+      ? "地図の上を指（またはマウス）でなぞってください。離すと形が確定します。"
+      : "地図をタップして角を置き、最後に「決定」。";
+  },
+  _click(e){ if(this.kind!=="tap") return; this.pts.push([e.latlng.lat, e.latlng.lng]); this.paint(); },
+  _down(ev){
+    if(!Draw.on || Draw.kind!=="trace") return;
+    if(ev.target.closest(".drawbar") || ev.target.closest(".maptools")) return;
+    ev.preventDefault(); ev.stopPropagation();
+    Draw.tracing=true; Draw.pts=[];
+    const move=e=>{
+      if(!Draw.tracing) return;
+      const ll=map.mouseEventToLatLng(e), p=[ll.lat,ll.lng];
+      const last=Draw.pts[Draw.pts.length-1];
+      if(!last || distM(last,p)>3){ Draw.pts.push(p); Draw.paint(); }
+    };
+    const up=()=>{
+      Draw.tracing=false;
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+      if(Draw.pts.length>4) Draw.finish();
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    move(ev);
+  },
+  paint(){
+    gDraw.clearLayers();
+    if(this.pts.length>1)
+      L.polygon(this.pts, {color:"#2F5BFF", weight:3, dashArray:"6 4", fillColor:"#2F5BFF", fillOpacity:.08}).addTo(gDraw);
+    if(this.kind==="tap")
+      this.pts.forEach((p,i)=> L.circleMarker(p,{radius:5,color:"#fff",weight:2,fillColor:"#2F5BFF",fillOpacity:1}).addTo(gDraw));
+    $("#drawDone").disabled = this.pts.length<3;
+  },
+  undo(){ this.pts.pop(); this.paint(); },
+  stop(){
+    this.on=false; this.tracing=false;
+    gDraw.clearLayers();
+    $("#drawbar").classList.add("hide");
+    document.body.classList.remove("drawing");
+    map.off("click", this._click, this);
+    map.getContainer().removeEventListener("pointerdown", this._down, true);
+    map.dragging.enable(); map.doubleClickZoom.enable();
+  },
+  cancel(){ const cb=this.cb; this.stop(); cb && cb(null); },
+  async finish(){
+    if(this.pts.length<3) return;
+    let ring = simplify(this.pts, 4);
+    const cb=this.cb, wantSnap=this.snap;
+    this.stop();
+    if(wantSnap){
+      try{
+        toast("道に合わせています…", 9000);
+        const bb = padBbox(bboxOf(ring), 150);
+        const diag = distM([bb.s,bb.w],[bb.n,bb.e]);
+        if(diag > 9000) throw new Error("範囲が広すぎます");
+        const ways = await fetchRoads(bb);
+        const res = snapRingToRoads(ring, ways);
+        ring = res.ring;
+        toast(res.snapped===res.total ? "道に合わせました"
+              : "道に合わせました（"+res.snapped+"/"+res.total+"区間）", 2600);
+      }catch(e){
+        toast("道に合わせられませんでした（"+(e.message||e)+"）。描いた形のまま使います。", 4200);
+      }
+    }
+    cb && cb(ring);
+  }
+};
+
+/* 区域カードの進捗（見える化のため、開いた人が集計を書き戻す） */
+Store.patchArea = async function(code, id, patch){
+  if(this.remote) await this.base(code).collection("areas").doc(id).set(patch,{merge:true});
+  else { const d=Local.read(code); if(d.areas[id]){ Object.assign(d.areas[id], patch); Local.write(code,d); } }
+};
+
+/* =========================================================================
+   10. 画面を描く
+   ========================================================================= */
+const MODE_LABEL = {road:"道すじ", block:"区画", pin:"建物"};
+
+function render(){
+  if(!S.project) return;
+  $("#pjName").textContent = S.project.name || "（名前なし）";
+  $("#pjCode").textContent = S.code;
+  renderMine(); renderAreas(); renderMembers(); renderLegend();
+}
+function renderLegend(){
+  const a=S.areas[S.activeAreaId];
+  if(!a || !S.units.length){ $("#legend").innerHTML = '<span>区域を選ぶと記録できます</span>'; return; }
+  const c=countStat();
+  $("#legend").innerHTML =
+    ['<span><i class="dot" style="background:'+ST_COLOR[1]+'"></i> 済 '+c[1]+'</span>',
+     '<span><i class="dot" style="background:'+ST_COLOR[0]+'"></i> 未 '+c[0]+'</span>',
+     '<span><i class="dot" style="background:'+ST_COLOR[2]+'"></i> 対象外 '+c[2]+'</span>'].join("");
+}
+function countStat(){
+  const c={0:0,1:0,2:0};
+  for(const u of S.units) c[(S.stat[u.id]&&S.stat[u.id].s)||0]++;
+  return c;
+}
+function progressOf(a){
+  const t=a.total|0, d=a.done|0;
+  return t? Math.round(d/t*100) : null;
+}
+
+/* ---------- 「配る」タブ ---------- */
+function renderMine(){
+  const host=$("#tab-mine");
+  const mine   = areaList().filter(a=>a.parent && a.uid===S.uid);
+  const others = areaList().filter(a=>a.parent && a.uid!==S.uid);
+  const solo   = areaList().filter(a=>!a.parent && !childrenOf(a.id).length);
+  const pick   = mine.concat(solo, others);
+
+  let h="";
+  if(!areaList().length){
+    h = '<div class="banner">まだ区域がありません。<b>「区域」タブ</b>で、配る範囲を決めてください。</div>';
+    host.innerHTML=h; return;
+  }
+  if(!mine.length && others.length)
+    h += '<div class="banner">あなたに割り当てられた区画がありません。下から選んで記録するか、管理者に割り当ててもらってください。</div>';
+
+  h += '<div class="row wrap" style="gap:6px;margin-bottom:10px">';
+  for(const a of pick){
+    const on = S.activeAreaId===a.id;
+    const p = (on && S.units.length) ? Math.round(countStat()[1]/S.units.length*100) : progressOf(a);
+    h += '<button class="btn sm '+(on?"primary":"")+'" data-pick="'+a.id+'">'
+       + '<i class="dot" style="background:'+(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
+       + esc(a.name||"区画") + (p!==null? ' <span class="mono">'+p+'%</span>':'') + '</button>';
+  }
+  h += '</div>';
+
+  const a = S.areas[S.activeAreaId];
+  if(!a){ h += '<p class="muted">上から区画を選んでください。</p>'; host.innerHTML=h; return; }
+
+  const ring = ringOf(a);
+  h += '<div class="item sel"><div class="hd"><i class="dot" style="background:'+(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
+     + '<b>'+esc(a.name||"区画")+'</b><span class="pill">'+esc(memberName(a.uid))+'</span></div>'
+     + '<p class="muted">'+fmtArea(areaM2(ring))+'</p>';
+
+  h += '<div class="row wrap" style="margin-top:10px;gap:6px">';
+  for(const m of ["road","block","pin"])
+    h += '<button class="btn sm '+(S.mode===m?"on":"")+'" data-mode="'+m+'">'+MODE_LABEL[m]+'</button>';
+  if(S.mode==="block")
+    h += '<select id="gridSel" style="width:auto"><option value="50">50m</option><option value="80">80m</option>'
+       + '<option value="120">120m</option><option value="200">200m</option></select>';
+  h += '</div>';
+
+  if(!S.units.length){
+    h += '<p class="muted" style="margin-top:10px">この区画の「'+MODE_LABEL[S.mode]+'」はまだ作られていません。</p>'
+       + '<div class="row" style="margin-top:8px"><button class="btn primary grow" id="btnGen">'+MODE_LABEL[S.mode]+'を用意する</button></div>';
+  }else{
+    const c=countStat(), total=S.units.length, pct=Math.round((c[1]+c[2])/total*100);
+    h += '<div class="bar"><i style="width:'+pct+'%"></i></div>'
+       + '<p class="muted" style="margin-top:6px"><b class="mono">'+c[1]+'</b> / '+total+' 済み'
+       + (c[2]?'（対象外 '+c[2]+'）':'')+'　残り <b class="mono">'+c[0]+'</b></p>'
+       + '<div class="row wrap" style="margin-top:10px;gap:6px">'
+       + '<button class="btn sm '+(S.autoWalk?"on":"")+'" id="btnWalk">'+(S.autoWalk?"自動記録：入":"歩いた道を自動記録")+'</button>'
+       + '<button class="btn sm" id="btnViewDone">見えている分を済みに</button>'
+       + '<button class="btn sm" id="btnReset">全部を未に戻す</button>'
+       + '<button class="btn sm" id="btnRegen">作り直す</button>'
+       + '</div>';
+  }
+  h += '</div>';
+  h += '<p class="muted" style="margin-top:12px">地図の'+(S.mode==="pin"?"ピン":S.mode==="block"?"マス":"道")
+     + 'をタップするたび　未 → 済み → 対象外 → 未　と変わります。</p>';
+  host.innerHTML=h;
+
+  $$("[data-pick]",host).forEach(b=> b.onclick=()=>selectArea(b.dataset.pick));
+  $$("[data-mode]",host).forEach(b=> b.onclick=()=>changeMode(b.dataset.mode));
+  const gs=$("#gridSel",host);
+  if(gs){ gs.value=String(a.grid||80); gs.onchange=async()=>{ await Store.patchArea(S.code, a.id, {grid:+gs.value}); toast("区画の大きさを変えました。作り直してください。"); }; }
+  const bg=$("#btnGen",host);   if(bg) bg.onclick=()=>doGenerate(a,false);
+  const br=$("#btnRegen",host); if(br) br.onclick=()=>doGenerate(a,true);
+  const bw=$("#btnWalk",host);  if(bw) bw.onclick=toggleWalk;
+  const bv=$("#btnViewDone",host); if(bv) bv.onclick=markVisibleDone;
+  const bre=$("#btnReset",host);if(bre) bre.onclick=resetArea;
+}
+
+/* ---------- 「区域」タブ ---------- */
+function renderAreas(){
+  const host=$("#tab-areas");
+  let h="";
+  if(!isAdmin()){
+    h += '<div class="banner">区域をつくれるのは管理者だけです。'
+       + '必要なら、いまの管理者に「仲間」タブから管理者にしてもらってください。</div>';
+  }else{
+    h += '<div class="row wrap" style="gap:6px;margin-bottom:12px">'
+       + '<button class="btn sm primary" id="btnSearchArea">地名・住所で探す</button>'
+       + '<button class="btn sm" id="btnDrawArea">囲ってつくる</button>'
+       + '</div>';
+  }
+  const ps=parents();
+  if(!ps.length) h += '<p class="muted">まだ区域がありません。</p>';
+  for(const p of ps){
+    const kids=childrenOf(p.id), ring=ringOf(p);
+    h += '<div class="item'+(S.activeAreaId===p.id?" sel":"")+'">'
+       + '<div class="hd"><b>'+esc(p.name||"区域")+'</b>'
+       + '<span class="pill">'+fmtArea(areaM2(ring))+'</span>'
+       + '<button class="btn sm" data-zoom="'+p.id+'">表示</button></div>';
+    if(isAdmin())
+      h += '<div class="row wrap" style="margin-top:8px;gap:6px">'
+         + '<button class="btn sm" data-split="'+p.id+'">人数で分ける</button>'
+         + '<button class="btn sm" data-redraw="'+p.id+'">描き直す</button>'
+         + '<button class="btn sm" data-rename="'+p.id+'">名前</button>'
+         + '<button class="btn sm danger" data-del="'+p.id+'">消す</button>'
+         + '</div>';
+    if(kids.length){
+      h += '<div class="sub">';
+      for(const k of kids){
+        const pct=progressOf(k);
+        h += '<div class="item'+(S.activeAreaId===k.id?" sel":"")+'" style="margin-top:6px">'
+           + '<div class="hd"><i class="dot" style="background:'+(k.uid?memberColor(k.uid):"#98A1B8")+'"></i>'
+           + '<b>'+esc(k.name||"区画")+'</b>'
+           + (pct!==null?'<span class="pill mono">'+pct+'%</span>':'')
+           + '<button class="btn sm" data-zoom="'+k.id+'">開く</button></div>';
+        if(isAdmin()){
+          h += '<div class="row" style="margin-top:6px;gap:6px">'
+             + '<select data-assign="'+k.id+'" class="grow"><option value="">未割り当て</option>';
+          for(const uid in S.members)
+            h += '<option value="'+esc(uid)+'"'+(k.uid===uid?" selected":"")+'>'+esc(S.members[uid].name||"名なし")+'</option>';
+          h += '</select>'
+             + '<button class="btn sm" data-redraw="'+k.id+'">描き直す</button>'
+             + '<button class="btn sm danger" data-del="'+k.id+'">消す</button></div>';
+        }else{
+          h += '<p class="muted">担当：'+esc(memberName(k.uid))+'</p>';
+        }
+        h += '</div>';
+      }
+      h += '</div>';
+    }else if(isAdmin()){
+      h += '<p class="muted" style="margin-top:6px">まだ分けていません。この区域のまま1人で配ることもできます。</p>';
+    }
+    h += '</div>';
+  }
+  host.innerHTML=h;
+
+  const bs=$("#btnSearchArea",host);  if(bs) bs.onclick=searchAreaFlow;
+  const bd=$("#btnDrawArea",host);    if(bd) bd.onclick=()=>drawNewArea("");
+  $$("[data-zoom]",host).forEach(b=> b.onclick=()=>{ selectArea(b.dataset.zoom); fitRing(ringOf(S.areas[b.dataset.zoom])); });
+  $$("[data-split]",host).forEach(b=> b.onclick=()=>splitFlow(S.areas[b.dataset.split]));
+  $$("[data-redraw]",host).forEach(b=> b.onclick=()=>redrawArea(S.areas[b.dataset.redraw]));
+  $$("[data-rename]",host).forEach(b=> b.onclick=()=>renameArea(S.areas[b.dataset.rename]));
+  $$("[data-del]",host).forEach(b=> b.onclick=()=>removeArea(S.areas[b.dataset.del]));
+  $$("[data-assign]",host).forEach(sel=> sel.onchange=async()=>{
+    const a=S.areas[sel.dataset.assign];
+    await Store.saveArea(S.code, Object.assign({}, a, {ring:ringOf(a), uid:sel.value}));
+    toast(sel.value? memberName(sel.value)+"に割り当てました" : "割り当てを外しました");
+  });
+}
+
+/* ---------- 「仲間」タブ ---------- */
+function renderMembers(){
+  const host=$("#tab-mem");
+  let h='<div class="item"><div class="hd"><b>あなた</b></div>'
+      + '<div class="row" style="margin-top:8px"><input type="text" id="myName" value="'+esc(meMember().name||"")+'">'
+      + '<button class="btn sm" id="btnMyName">変更</button></div>'
+      + (isAdmin()? '<p class="muted" style="margin-top:6px">あなたは管理者です。</p>' : '')
+      + '</div>';
+  h += '<h2 style="font-size:13px;color:var(--slate);margin:16px 0 8px;letter-spacing:.06em">仲間（'+Object.keys(S.members).length+'人）</h2>';
+  for(const uid in S.members){
+    const m=S.members[uid];
+    const mine=areaList().filter(a=>a.uid===uid);
+    let t=0,d=0; for(const a of mine){ t+=a.total|0; d+=a.done|0; }
+    const pct = t? Math.round(d/t*100) : null;
+    h += '<div class="item"><div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
+       + '<b>'+esc(m.name||"名なし")+'</b>'
+       + (m.admin?'<span class="pill">管理者</span>':'')
+       + (uid===S.uid?'<span class="pill">あなた</span>':'')+'</div>'
+       + '<p class="muted">担当 '+mine.length+' 区画'+(pct!==null?'／'+d+' of '+t+'（'+pct+'%）':'')+'</p>'
+       + (pct!==null?'<div class="bar"><i style="width:'+pct+'%"></i></div>':'')
+       + (isAdmin() && uid!==S.project.ownerUid
+          ? '<div class="row" style="margin-top:8px"><button class="btn sm" data-adm="'+esc(uid)+'" data-to="'+(m.admin?"0":"1")+'">'
+            + (m.admin?"管理者を外す":"管理者にする")+'</button></div>' : '')
+       + '</div>';
+  }
+  h += '<div class="card" style="margin-top:16px"><h2>合言葉コード</h2>'
+     + '<p class="codein mono" style="margin:10px 0">'+esc(S.code)+'</p>'
+     + '<div class="row"><button class="btn grow" id="btnCopyLink">参加リンクをコピー</button></div>'
+     + '<p class="muted" style="margin-top:10px">このコードを知っている人は、誰でも参加して記録できます。</p>'
+     + (isAdmin()? '<p class="muted" style="margin-top:6px">区域をつくれるのは管理者だけです。'
+                 + '端末をなくしたときのために、もう1人を管理者にしておくと安心です。</p>':'')
+     + '</div>';
+  host.innerHTML=h;
+  $$("[data-adm]",host).forEach(b=> b.onclick=async()=>{
+    const uid=b.dataset.adm, to=b.dataset.to==="1";
+    await Store.setMember(S.code, uid, {admin:to});
+    toast(memberName(uid)+(to?" を管理者にしました":" の管理者を外しました"));
+  });
+  $("#btnMyName",host).onclick=async()=>{
+    const v=$("#myName",host).value.trim(); if(!v) return;
+    await Store.setMember(S.code, S.uid, {name:v}); toast("名前を変えました");
+  };
+  $("#btnCopyLink",host).onclick=async()=>{
+    const url=location.origin+location.pathname+"#"+S.code;
+    try{ await navigator.clipboard.writeText(url); toast("参加リンクをコピーしました"); }
+    catch(e){ modal('<h2>参加リンク</h2><p class="mono" style="word-break:break-all">'+esc(url)+'</p>',{noCancel:true,ok:"閉じる"}); }
+  };
+}
+
+/* =========================================================================
+   11. 操作
+   ========================================================================= */
+async function selectArea(id){
+  if(S.offStat){ S.offStat(); S.offStat=null; }
+  S.activeAreaId=id; S.units=[]; S.stat={}; S.unitLayers={};
+  const a=S.areas[id];
+  drawAreas(); drawUnits(); render();
+  if(!a) return;
+  S.mode = a.mode || "road";
+  try{
+    const u = await Store.loadUnits(S.code, id, S.mode);
+    if(S.activeAreaId!==id) return;
+    S.units = u || [];
+  }catch(e){ S.units=[]; }
+  S.offStat = Store.watchStatus(S.code, id, S.mode, st=>{
+    S.stat=st;
+    if(Object.keys(S.unitLayers).length) S.units.forEach(restyleUnit); else drawUnits();
+    renderMine(); renderLegend(); pushCounts();
+  });
+  drawUnits(); render();
+  if(S.units.length) fitRing(ringOf(a));
+}
+
+async function changeMode(m){
+  const a=S.areas[S.activeAreaId]; if(!a) return;
+  if(S.mode===m) return;
+  await Store.patchArea(S.code, a.id, {mode:m});
+  S.mode=m;
+  await selectArea(a.id);
+}
+
+let countsTimer=null;
+function pushCounts(){
+  clearTimeout(countsTimer);
+  countsTimer=setTimeout(()=>{
+    const a=S.areas[S.activeAreaId]; if(!a||!S.units.length) return;
+    const c=countStat();
+    Store.patchArea(S.code, a.id, {total:S.units.length, done:c[1], skip:c[2], mode:S.mode});
+  }, 1200);
+}
+
+async function doGenerate(area, again){
+  if(S.busy) return;
+  if(again && !(await modal('<h2>作り直しますか？</h2><p class="muted">いまの記録（済み・対象外）は消えます。</p>',{ok:"作り直す"}))) return;
+  S.busy=true;
+  const box = msg => toast(msg, 20000);
+  try{
+    box("用意しています…");
+    const units = await generateUnits({ring:ringOf(area)}, S.mode, {gridSize:area.grid||80}, box);
+    if(!units.length){ toast("この範囲では見つかりませんでした。範囲か単位を変えてみてください。", 4000); return; }
+    if(units.length>4000){ toast("多すぎます（"+units.length+"）。区域を分けてください。",4500); return; }
+    await Store.saveUnits(S.code, area.id, S.mode, units);
+    if(again){
+      /* 記録を消す */
+      if(!Store.remote){ const d=Local.read(S.code); delete d.stat[area.id+"|"+S.mode]; Local.write(S.code,d); }
+      else { const col=Store.base(S.code).collection("areas").doc(area.id).collection("stat");
+             const s=await col.get(); const b=Store.db.batch();
+             s.forEach(x=>{ if(x.id.startsWith(S.mode+"_")) b.delete(x.ref); }); await b.commit(); }
+    }
+    await Store.patchArea(S.code, area.id, {total:units.length, done:0, skip:0, mode:S.mode});
+    S.units=units; S.stat={}; drawUnits(); render();
+    toast(MODE_LABEL[S.mode]+"を "+units.length+" 件つくりました");
+  }catch(e){
+    toast("うまくいきませんでした：" + (e.message||e), 5200);
+  }finally{ S.busy=false; }
+}
+
+function tapUnit(id){
+  const u=S.units.find(x=>x.id===id); if(!u) return;
+  const cur=(S.stat[id]&&S.stat[id].s)||ST_TODO;
+  const next=(cur+1)%3;
+  S.stat[id]=Object.assign({}, S.stat[id]||{}, {s:next, b:S.uid, bn:meMember().name, t:Date.now()});
+  restyleUnit(u); renderLegend(); renderMine(); pushCounts();
+  Store.setStatus(S.code, S.activeAreaId, S.mode, id, next, meMember().name);
+}
+
+/* --- 現在地・自動記録 --- */
+let watchId=null;
+function showMe(p, acc){
+  const ll=[p[0],p[1]];
+  if(!meMarker){
+    meMarker=L.circleMarker(ll,{radius:7,color:"#fff",weight:2.5,fillColor:"#2F5BFF",fillOpacity:1}).addTo(map);
+    meCircle=L.circle(ll,{radius:acc||20,color:"#2F5BFF",weight:1,opacity:.35,fillOpacity:.06}).addTo(map);
+  }else{ meMarker.setLatLng(ll); meCircle.setLatLng(ll).setRadius(acc||20); }
+}
+function locateOnce(){
+  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+  navigator.geolocation.getCurrentPosition(
+    p=>{ S.pos=[p.coords.latitude,p.coords.longitude]; showMe(S.pos,p.coords.accuracy); map.setView(S.pos, Math.max(map.getZoom(),17)); },
+    e=>toast("現在地をとれませんでした（"+e.message+"）",4000),
+    {enableHighAccuracy:true, timeout:12000, maximumAge:5000});
+}
+function toggleWalk(){
+  if(S.autoWalk){ stopWalk(); return; }
+  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+  S.autoWalk=true;
+  watchId=navigator.geolocation.watchPosition(p=>{
+    S.pos=[p.coords.latitude,p.coords.longitude]; S.posAcc=p.coords.accuracy;
+    showMe(S.pos,p.coords.accuracy);
+    if(p.coords.accuracy>40) return;
+    autoMark(S.pos, Math.max(14, Math.min(25, p.coords.accuracy)));
+  }, e=>{ toast("現在地が止まりました（"+e.message+"）",4000); stopWalk(); },
+     {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+  toast("歩いた道を自動で済みにします。画面を消しても続くとは限りません。", 4200);
+  renderMine();
+}
+function stopWalk(){
+  S.autoWalk=false;
+  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+  watchId=null; renderMine();
+}
+function distToSeg(p,a,b){
+  const c=ringCenter([a,b]), pr=projector(c[0]);
+  const P=pr.to(p), A=pr.to(a), B=pr.to(b);
+  const dx=B[0]-A[0], dy=B[1]-A[1], L2=dx*dx+dy*dy;
+  let t = L2>0 ? ((P[0]-A[0])*dx+(P[1]-A[1])*dy)/L2 : 0; t=clamp(t,0,1);
+  return Math.hypot(P[0]-(A[0]+t*dx), P[1]-(A[1]+t*dy));
+}
+function autoMark(pos, radius){
+  const hits=[];
+  for(const u of S.units){
+    if((S.stat[u.id]&&S.stat[u.id].s)) continue;
+    let hit=false;
+    if(u.t==="road"){
+      for(let i=0;i<u.g.length-1 && !hit;i++) if(distToSeg(pos,u.g[i],u.g[i+1])<radius) hit=true;
+    }else if(u.t==="block"){
+      hit = pointInRing(pos, u.g);
+    }
+    if(hit) hits.push([u.id, ST_DONE]);
+  }
+  if(!hits.length) return;
+  for(const [id] of hits){ S.stat[id]={s:ST_DONE,b:S.uid,bn:meMember().name,t:Date.now()}; }
+  S.units.forEach(restyleUnit); renderLegend(); renderMine(); pushCounts();
+  Store.setStatusMany(S.code, S.activeAreaId, S.mode, hits, meMember().name);
+}
+async function markVisibleDone(){
+  const b=map.getBounds();
+  const inView = S.units.filter(u=>{
+    if(u.t==="pin") return b.contains(L.latLng(u.g[0][0],u.g[0][1]));
+    return u.g.some(p=>b.contains(L.latLng(p[0],p[1])));
+  }).filter(u=>((S.stat[u.id]&&S.stat[u.id].s)||0)===ST_TODO);
+  if(!inView.length){ toast("見えている範囲に、未配布はありません"); return; }
+  if(!(await modal('<h2>まとめて済みにする</h2><p class="muted">いま画面に見えている <b>'+inView.length+'</b> 件を「配布済み」にします。</p>',{ok:"済みにする"}))) return;
+  const es=inView.map(u=>[u.id, ST_DONE]);
+  for(const [id] of es) S.stat[id]={s:ST_DONE,b:S.uid,bn:meMember().name,t:Date.now()};
+  S.units.forEach(restyleUnit); renderLegend(); renderMine(); pushCounts();
+  await Store.setStatusMany(S.code, S.activeAreaId, S.mode, es, meMember().name);
+  toast(es.length+" 件を済みにしました");
+}
+async function resetArea(){
+  if(!(await modal('<h2>全部を未に戻す</h2><p class="muted">この区画の記録がすべて消えます。</p>',{ok:"戻す"}))) return;
+  const es=S.units.map(u=>[u.id, ST_TODO]);
+  for(const [id] of es) S.stat[id]={s:ST_TODO,b:S.uid,bn:meMember().name,t:Date.now()};
+  S.units.forEach(restyleUnit); renderLegend(); renderMine(); pushCounts();
+  await Store.setStatusMany(S.code, S.activeAreaId, S.mode, es, meMember().name);
+  toast("未に戻しました");
+}
+
+/* --- 区域づくり --- */
+async function saveNewArea(ring, parentId, name){
+  const id = await Store.saveArea(S.code, {name:name||"", parent:parentId||"", ring, mode:"road", grid:80});
+  toast(parentId? "区画をつくりました" : "区域をつくりました");
+  return id;
+}
+function drawNewArea(parentId){
+  Draw.start({
+    title: parentId? "区画を囲む" : "区域を囲む",
+    onDone: async ring=>{
+      if(!ring) return;
+      const nm = await promptText(parentId?"区画の名前":"区域の名前", parentId?"例：北ブロック":"例：東町2丁目");
+      if(nm===null) return;
+      const id = await saveNewArea(ring, parentId, nm || (parentId?"区画":"区域"));
+      setTimeout(()=>{ selectArea(id); fitRing(ring); }, 250);
+    }
+  });
+  setTab("mine");
+}
+function redrawArea(a){
+  if(!a) return;
+  Draw.start({
+    title:"「"+(a.name||"区域")+"」を描き直す",
+    onDone: async ring=>{
+      if(!ring) return;
+      await Store.saveArea(S.code, Object.assign({}, a, {ring}));
+      toast("形を変えました。記録の単位は作り直してください。", 4000);
+      setTimeout(()=>{ selectArea(a.id); fitRing(ring); }, 250);
+    }
+  });
+}
+async function renameArea(a){
+  const nm=await promptText("名前を変える","", a.name||"");
+  if(nm===null||!nm) return;
+  await Store.saveArea(S.code, Object.assign({}, a, {ring:ringOf(a), name:nm}));
+}
+async function removeArea(a){
+  const kids=childrenOf(a.id);
+  if(!(await modal('<h2>「'+esc(a.name||"区域")+'」を消す</h2><p class="muted">'
+      +(kids.length? "中の区画 "+kids.length+" 個も一緒に消えます。":"記録も一緒に消えます。")+'</p>',{ok:"消す"}))) return;
+  for(const k of kids) await Store.deleteArea(S.code, k.id);
+  await Store.deleteArea(S.code, a.id);
+  if(S.activeAreaId===a.id||kids.some(k=>k.id===S.activeAreaId)) await selectArea(null);
+  toast("消しました");
+}
+async function splitFlow(p){
+  const kids=childrenOf(p.id);
+  const box = await promptSplit(Object.keys(S.members).length||2, kids.length);
+  if(!box) return;
+  const ring=ringOf(p);
+  const pieces = splitRing(ring, box.n, box.axis);
+  if(pieces.length<box.n){ toast("うまく分けられませんでした。形を単純にしてから試してください。",4200); return; }
+  if(box.replace) for(const k of kids) await Store.deleteArea(S.code, k.id);
+  const uids=Object.keys(S.members);
+  let i=0;
+  for(const piece of pieces){
+    await Store.saveArea(S.code, {
+      name:(p.name||"区域")+"-"+String.fromCharCode(65+i),
+      parent:p.id, ring:piece, mode:"road", grid:80,
+      uid: box.assign && uids[i] ? uids[i] : ""
+    });
+    i++;
+  }
+  toast(box.n+" つに分けました");
+}
+
+/* --- 地名で探す --- */
+async function searchAreaFlow(){
+  const html = '<h2>地名・住所で探す</h2>'
+    + '<p class="muted">市区町村や町名で探せます。境界のデータが無い場所は、地図を寄せてから「囲ってつくる」を使ってください。</p>'
+    + '<div class="row" style="margin-top:10px"><input type="text" id="qIn" class="grow" placeholder="例：新宿区西新宿"><button class="btn" id="qGo">探す</button></div>'
+    + '<div id="qOut" style="margin-top:12px"></div>';
+  let chosen=null;
+  await modal(html, {ok:"閉じる", noCancel:true, onOpen:box=>{
+    const out=$("#qOut",box), inp=$("#qIn",box);
+    const run=async()=>{
+      const q=inp.value.trim(); if(!q) return;
+      out.innerHTML='<p class="muted">探しています…</p>';
+      try{
+        const rows=await geoSearch(q);
+        if(!rows.length){ out.innerHTML='<p class="muted">見つかりませんでした。</p>'; return; }
+        out.innerHTML='<ul class="sr">'+rows.map((r,i)=>
+          '<li data-i="'+i+'"><b>'+esc(r.short)+(r.ring?'':'（境界データなし）')+'</b><span>'+esc(r.name)+'</span></li>').join("")+'</ul>';
+        $$("li",out).forEach(li=> li.onclick=()=>{ chosen=rows[+li.dataset.i]; box.querySelector('[data-x="1"]').click(); });
+      }catch(e){ out.innerHTML='<p class="muted">検索できませんでした（'+esc(e.message||e)+'）</p>'; }
+    };
+    $("#qGo",box).onclick=run;
+    inp.onkeydown=e=>{ if(e.key==="Enter") run(); };
+    setTimeout(()=>inp.focus(),60);
+  }});
+  finish();
+  async function finish(){
+    if(!chosen) return;
+    const r=chosen; chosen=null;
+    if(r.ring){
+      map.fitBounds(L.latLngBounds(r.ring.map(p=>L.latLng(p[0],p[1]))), {padding:[24,24]});
+      const ok = await modal('<h2>'+esc(r.short)+'</h2><p class="muted">この境界を区域にしますか？　'
+        +fmtArea(areaM2(r.ring))+'</p>', {ok:"区域にする", cancel:"やめる"});
+      if(ok){ const id=await saveNewArea(r.ring, "", r.short); setTimeout(()=>selectArea(id),200); }
+    }else{
+      if(r.bb) map.fitBounds([[r.bb[0],r.bb[2]],[r.bb[1],r.bb[3]]]);
+      else map.setView([r.lat,r.lng],16);
+      toast("境界のデータがありませんでした。「囲ってつくる」で指定してください。",4600);
+    }
+  }
+}
+
+/* --- 小さな入力モーダル --- */
+function promptText(title, ph, val){
+  return new Promise(async res=>{
+    let v=null;
+    const ok=await modal('<h2>'+esc(title)+'</h2><input type="text" id="pIn" value="'+esc(val||"")+'" placeholder="'+esc(ph||"")+'">',
+      {ok:"決定", onOpen:box=>{ const i=$("#pIn",box); setTimeout(()=>{i.focus();i.select();},60);
+        i.onkeydown=e=>{ if(e.key==="Enter"){ v=i.value.trim(); $("#modalBox").querySelector('[data-x="1"]').click(); } };
+        box.querySelector('[data-x="1"]').addEventListener("click",()=>{ v=i.value.trim(); }, true); }});
+    res(ok? (v!==null?v:"") : null);
+  });
+}
+function promptSplit(defN, kidCount){
+  return new Promise(async res=>{
+    let out=null;
+    const ok=await modal('<h2>人数で分ける</h2>'
+      + '<label class="fld"><span>いくつに分けるか</span><input type="number" id="sN" min="2" max="12" value="'+clamp(defN,2,12)+'"></label>'
+      + '<label class="fld"><span>分ける向き</span><select id="sAx"><option value="auto">自動（長いほうを切る）</option>'
+      + '<option value="ew">たて線で（東西に並べる）</option><option value="ns">よこ線で（南北に並べる）</option></select></label>'
+      + '<label class="fld"><span><input type="checkbox" id="sAs" checked> 仲間へ順に割り当てる</span></label>'
+      + (kidCount? '<label class="fld"><span><input type="checkbox" id="sRe" checked> いまある '+kidCount+' 区画を作り直す</span></label>':'')
+      + '<p class="muted" style="margin-top:10px">面積がだいたい同じになるように切ります。あとから1つずつ描き直せます。</p>',
+      {ok:"分ける", onOpen:box=>{
+        box.querySelector('[data-x="1"]').addEventListener("click",()=>{
+          out={ n:clamp(parseInt($("#sN",box).value,10)||2,2,12), axis:$("#sAx",box).value,
+                assign:$("#sAs",box).checked, replace: $("#sRe",box)? $("#sRe",box).checked : false };
+        }, true);
+      }});
+    res(ok?out:null);
+  });
+}
+
+/* =========================================================================
+   12. タブ・画面まわり
+   ========================================================================= */
+function setTab(t){
+  S.tab=t;
+  $$(".tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
+  ["mine","areas","mem"].forEach(k=> $("#tab-"+k).classList.toggle("hide", k!==t));
+}
+function showScreen(id){
+  $$(".screen").forEach(s=>s.classList.toggle("on", s.id===id));
+  if(id==="app") setTimeout(()=>map.invalidateSize(), 60);
+}
+
+async function openProject(code, myName){
+  const pj = await Store.joinProject(code, myName);
+  if(!pj){ toast("その合言葉コードの地区は見つかりませんでした", 4000); return false; }
+  if(S.off) S.off();
+  S.code=code; S.uid=Store.uid;
+  pushRecent(code, pj.name);
+  location.hash = code;
+  S.off = Store.watch(code, snap=>{
+    S.project = snap.project; S.members = snap.members||{}; S.areas = snap.areas||{};
+    if(!S.project) return;
+    drawAreas(); render();
+    if(!S.activeAreaId){
+      const mine=areaList().filter(a=>a.parent && a.uid===S.uid);
+      const first = mine[0] || areaList().filter(a=>a.parent)[0] || areaList()[0];
+      if(first){ selectArea(first.id); }
+      else {
+        const all=areaList().map(a=>ringOf(a)).flat();
+        if(all.length) fitRing(all);
+      }
+    }
+  });
+  showScreen("app");
+  setTab("mine");
+  return true;
+}
+
+function renderRecents(){
+  const list=recents();
+  if(!list.length) return;
+  $("#recentCard").classList.remove("hide");
+  $("#recentList").innerHTML = list.map(r=>
+    '<div class="item"><div class="hd"><b>'+esc(r.name||"（名前なし）")+'</b>'
+    + '<span class="pill mono">'+esc(r.code)+'</span>'
+    + '<button class="btn sm" data-open="'+esc(r.code)+'">ひらく</button></div></div>').join("");
+  $$("[data-open]", $("#recentList")).forEach(b=> b.onclick=async()=>{
+    const code=b.dataset.open;
+    const prev = localStorage.getItem(LS_PREFIX+"name") || "";
+    const nm = prev || await promptText("あなたの名前","例：山田");
+    if(nm===null) return;
+    localStorage.setItem(LS_PREFIX+"name", nm);
+    await openProject(code, nm);
+  });
+}
+
+/* =========================================================================
+   13. 起動
+   ========================================================================= */
+async function boot(){
+  initMap();
+
+  /* ホーム */
+  $("#btnCreate").onclick = async ()=>{
+    const name=$("#newName").value.trim(), me=$("#newMe").value.trim();
+    if(!name){ toast("地区の名前を入れてください"); return; }
+    if(!me){ toast("あなたの名前を入れてください"); return; }
+    localStorage.setItem(LS_PREFIX+"name", me);
+    const {code} = await Store.createProject(name, me);
+    await openProject(code, me);
+    await modal('<h2>できました</h2>'
+      + '<p class="muted">仲間にこの合言葉コードを伝えてください。</p>'
+      + '<p class="codein mono" style="margin:12px 0">'+esc(code)+'</p>'
+      + '<p class="muted">あなたが管理者です。ほかの人を管理者にするときは「仲間」タブから。</p>',
+      {noCancel:true, ok:"はじめる"});
+    setTab("areas");
+  };
+  $("#btnJoin").onclick = async ()=>{
+    const code=$("#joinCode").value.trim().toUpperCase(), me=$("#joinMe").value.trim();
+    if(code.length!==6){ toast("コードは6文字です"); return; }
+    if(!me){ toast("あなたの名前を入れてください"); return; }
+    localStorage.setItem(LS_PREFIX+"name", me);
+    await openProject(code, me);
+  };
+  $("#joinCode").addEventListener("input", e=>{ e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""); });
+  const savedName = localStorage.getItem(LS_PREFIX+"name")||"";
+  if(savedName){ $("#newMe").value=savedName; $("#joinMe").value=savedName; }
+  renderRecents();
+
+  /* 上のバー */
+  $("#btnHome").onclick = ()=>{ location.hash=""; showScreen("home"); renderRecents(); };
+  $("#btnShare").onclick = ()=>{ setTab("mem"); $("#tab-mem").scrollTop = 99999; };
+  $("#btnMenu").onclick = async ()=>{
+    const ok = await modal('<h2>この地区について</h2>'
+      + '<p class="muted">名前：'+esc(S.project.name)+'<br>コード：<b class="mono">'+esc(S.code)+'</b><br>'
+      + '保存先：'+(Store.remote?"Firebase（仲間と共有）":"この端末だけ")+'</p>'
+      + '<p class="muted" style="margin-top:10px">区域や記録の元データを書き出せます。</p>',
+      {ok:"データを書き出す", cancel:"閉じる"});
+    if(ok) exportJSON();
+  };
+
+  /* 地図ツール */
+  $("#btnLocate").onclick = locateOnce;
+  $("#btnFit").onclick = ()=>{
+    const a=S.areas[S.activeAreaId];
+    if(a) fitRing(ringOf(a));
+    else { const all=areaList().map(x=>ringOf(x)).flat(); if(all.length) fitRing(all); }
+  };
+  $("#btnBase").onclick = async ()=>{
+    const names={pale:"淡色地図",std:"標準地図",photo:"航空写真",osm:"OpenStreetMap"};
+    const ok=await modal('<h2>地図の種類</h2>'+Object.keys(names).map(k=>
+      '<label class="fld"><span><input type="radio" name="bs" value="'+k+'"'+(k===baseName?" checked":"")+'> '+names[k]+'</span></label>').join(""),
+      {ok:"変える", onOpen:box=>{ box.querySelector('[data-x="1"]').addEventListener("click",()=>{
+        const v=box.querySelector('input[name=bs]:checked'); if(v) setBase(v.value); },true); }});
+  };
+
+  /* 描画バー */
+  $("#drawModeTap").onclick   = ()=>Draw.setKind("tap");
+  $("#drawModeTrace").onclick = ()=>Draw.setKind("trace");
+  $("#drawSnap").onclick      = ()=>{ Draw.snap=!Draw.snap; Draw.syncBtns(); };
+  $("#drawUndo").onclick      = ()=>Draw.undo();
+  $("#drawCancel").onclick    = ()=>Draw.cancel();
+  $("#drawDone").onclick      = ()=>Draw.finish();
+
+  /* タブ */
+  $$(".tabs button").forEach(b=> b.onclick=()=>setTab(b.dataset.tab));
+
+  /* パネルの高さを引っぱって変える */
+  const grab=$("#grabber"), panel=$("#panel");
+  grab.addEventListener("pointerdown", e=>{
+    grab.setPointerCapture(e.pointerId);
+    const y0=e.clientY, h0=panel.getBoundingClientRect().height;
+    const mv=ev=>{ const h=clamp(h0+(y0-ev.clientY), 90, window.innerHeight*0.85);
+                   panel.style.maxHeight=h+"px"; panel.style.height=h+"px"; map.invalidateSize(); };
+    const up=()=>{ grab.removeEventListener("pointermove",mv); grab.removeEventListener("pointerup",up); };
+    grab.addEventListener("pointermove",mv); grab.addEventListener("pointerup",up);
+  });
+
+  /* データの保存先 */
+  await Store.init();
+  S.uid = Store.uid;
+  if(!Store.remote){
+    const b=$("#modeBanner"); b.classList.remove("hide");
+    b.innerHTML = HAS_FB
+      ? '<b>この端末だけのモードで動いています。</b><br>'+esc(Store.fbError||"Firebase につながりません")+'。記録は仲間と共有されません。'
+      : '<b>まだ共有の設定がされていません。</b><br>いまは記録がこの端末の中だけに残ります。'
+        + 'Firebase の設定を入れると、仲間とその場で共有できるようになります（README を参照）。';
+  }
+
+  /* URL の #コード から開く */
+  const h=(location.hash||"").replace("#","").trim().toUpperCase();
+  if(h.length===6){
+    const nm = localStorage.getItem(LS_PREFIX+"name") || "";
+    if(nm) await openProject(h, nm);
+    else { $("#joinCode").value=h; $("#joinMe").focus(); }
+  }
+}
+
+function exportJSON(){
+  const data = {app:APP_ID, code:S.code, project:S.project, members:S.members,
+                areas:areaList().map(a=>Object.assign({}, a, {ring:ringOf(a)})),
+                activeUnits:{areaId:S.activeAreaId, mode:S.mode, units:S.units, stat:S.stat}};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="chirashi-map-"+S.code+".json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+}
+
+window.addEventListener("beforeunload", ()=>{ if(S.autoWalk) stopWalk(); });
+boot().catch(e=>{ console.error(e); toast("起動できませんでした："+(e.message||e), 8000); });
+</script>
+</body>
+</html>

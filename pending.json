@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-26",
+  "updated": "2026-09-06",
   "pending": [
     {
       "id": "p1",
@@ -24,6 +24,14 @@
       "question": "差し替える問題文の一覧をもらえれば反映する。どの形式（テキスト / スプレッドシート）で渡すか決めてほしい。",
       "toolId": "t1",
       "created": "2026-08-26"
+    },
+    {
+      "id": "p4",
+      "task": "チラシマップ用の Firebase プロジェクトを用意する",
+      "situation": "アプリは完成していて、区域づくり・分割・記録・オフライン保存まで動く。ただし firebaseConfig が PLACEHOLDER のままなので、いまは『この端末だけ』モードで動いている。仲間と記録を共有するには Firebase 側の用意が要る。",
+      "question": "Firebase Console で新規プロジェクトを作り、(1) 匿名ログインを有効化 (2) 承認済みドメインに oceanhermit.github.io を追加 (3) Firestore を作成 (4) chirashi-map/firestore.rules を貼る、まで済ませて firebaseConfig を渡してほしい。渡してもらえれば index.html に入れる。",
+      "toolId": "t11",
+      "created": "2026-09-06"
     }
   ]
 }
