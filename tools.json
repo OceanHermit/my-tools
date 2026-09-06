@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-26",
+  "updated": "2026-09-06",
   "tools": [
     {
       "id": "t1",
@@ -204,6 +204,29 @@
         }
       ],
       "updated": "2026-08-02"
+    },
+    {
+      "id": "t11",
+      "name": "参詣状況の自動通知",
+      "summary": "会合マトリックスの赤（先生のご縁）の行事がある日の12:05に、参詣予定と参詣の入力状況（入力済み・未入力の人数と氏名）をメール／LINEで通知する Apps Script。",
+      "status": "test",
+      "progress": 80,
+      "next": [
+        "スプレッドシートの Apps Script に貼って sanpaiSetup を実行する",
+        "9/13 の東京報恩講で実際に通知が届くか確認する",
+        "LINE に送る場合はチャネルアクセストークンと送信先IDをスクリプトプロパティに入れる"
+      ],
+      "links": [
+        {
+          "label": "会合マトリックス【キズナ地区】",
+          "url": ""
+        },
+        {
+          "label": "コード apps-script/sanpai_notify.gs",
+          "url": "https://github.com/OceanHermit/my-tools/blob/main/apps-script/sanpai_notify.gs"
+        }
+      ],
+      "updated": "2026-09-06"
     }
   ]
 }

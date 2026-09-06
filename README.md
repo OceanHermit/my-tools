@@ -36,11 +36,16 @@ my-tools/
 │   └── index.html
 ├── kasanari/
 │   └── index.html
+├── apps-script/          # Googleスプレッドシート側のコード（サイトには出ない）
+│   ├── sanpai_notify.gs
+│   └── README.md
 ├── .nojekyll             # GitHub Pages 用（Jekyll 処理を無効化）
 └── README.md
 ```
 
 ビルド不要の静的サイト。`index.html` を置いたフォルダ名がそのまま URL になる。
+`apps-script/` は Web ページではなく、Googleスプレッドシートに貼る Apps Script の
+置き場所。詳しくは [apps-script/README.md](apps-script/README.md)。
 
 ## 画面構成
 
