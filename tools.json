@@ -1,6 +1,39 @@
 {
-  "updated": "2026-08-26",
+  "updated": "2026-09-07",
   "tools": [
+    {
+      "id": "t11",
+      "name": "チラシマップ",
+      "summary": "チームでチラシを配る区域を決め、人ごとに分け、配った所と残りを地図で記録するツール。区域は地名検索か手描きで指定でき、手描きは道に沿ってスナップする。記録の単位は道すじ／区画／建物から選べる。",
+      "status": "test",
+      "progress": 85,
+      "url": "./chirashi-map/",
+      "next": [
+        "Firebase Console で匿名ログインを有効化する",
+        "Firestore を作成し、chirashi-map/firestore.rules をルールに貼る",
+        "実機で地区づくり→参加→記録を通し、共有できているか確かめる",
+        "実際の配布エリアで、道スナップと道すじ単位の生成を試す"
+      ],
+      "links": [
+        {
+          "label": "Firebase (flyer-790e5)",
+          "url": ""
+        },
+        {
+          "label": "地理院タイル",
+          "url": "https://maps.gsi.go.jp/development/ichiran.html"
+        },
+        {
+          "label": "Overpass API",
+          "url": "https://overpass-api.de/"
+        },
+        {
+          "label": "Nominatim",
+          "url": "https://nominatim.openstreetmap.org/"
+        }
+      ],
+      "updated": "2026-09-07"
+    },
     {
       "id": "t1",
       "name": "教学でGo!",

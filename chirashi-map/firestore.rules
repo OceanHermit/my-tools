@@ -1,0 +1,82 @@
+rules_version = '2';
+
+/* チラシマップ（chirashi-map）用の Firestore ルール。
+   Console の「ルール」タブに、この中身をそのまま貼る。
+
+   考え方
+   - ログイン（匿名でよい）していない人は何も読めない。
+   - 参加者＝ members/{uid} が存在する人。合言葉コードを知っている人だけが作れる。
+   - 区域をつくる・分ける・割り当てるのは管理者だけ。
+   - 配布の記録（stat）と単位の生成（geom）は、参加者なら誰でも書ける。
+   - 管理者を増やせるのは管理者だけ。自分で自分を管理者にはできない。
+*/
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    match /artifacts/chirashi-map/public/data/projects/{code} {
+
+      function signedIn()  { return request.auth != null; }
+      function myMember()  { return get(/databases/$(db)/documents/artifacts/chirashi-map/public/data/projects/$(code)/members/$(request.auth.uid)); }
+      function isMember()  { return signedIn() && exists(/databases/$(db)/documents/artifacts/chirashi-map/public/data/projects/$(code)/members/$(request.auth.uid)); }
+      function isAdmin()   { return isMember() && myMember().data.admin == true; }
+      function isOwner()   { return signedIn() && resource != null && resource.data.ownerUid == request.auth.uid; }
+      function ownerUid()  { return get(/databases/$(db)/documents/artifacts/chirashi-map/public/data/projects/$(code)).data.ownerUid; }
+
+      /* 地区そのもの。コードを知っていれば読める（参加の前に名前を出すため） */
+      allow get:    if signedIn();
+      allow list:   if false;
+      allow create: if signedIn()
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() < 120;
+      allow update: if isAdmin() && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isOwner();
+
+      /* 仲間 */
+      match /members/{uid} {
+        allow read: if signedIn();
+
+        /* 自分の分をつくる。管理者になれるのは、その地区をつくった本人だけ */
+        allow create: if signedIn() && uid == request.auth.uid
+                      && (request.resource.data.admin == false || request.auth.uid == ownerUid());
+
+        /* 自分の名前・色は自分で変えられる。ただし admin は変えられない。
+           admin を変えられるのは管理者だけ（＝管理者が指名する）。 */
+        allow update: if signedIn() && (
+                        isAdmin()
+                        || (uid == request.auth.uid && request.resource.data.admin == resource.data.admin)
+                        || (uid == request.auth.uid && request.auth.uid == ownerUid())
+                      );
+        allow delete: if signedIn() && (uid == request.auth.uid || isAdmin());
+      }
+
+      /* 区域 */
+      match /areas/{areaId} {
+        function countersOnly() {
+          return request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['total','done','skip','mode','grid','updated']);
+        }
+        allow read:   if isMember();
+        allow create: if isAdmin();
+        allow update: if isAdmin() || (isMember() && countersOnly());
+        allow delete: if isAdmin();
+
+        /* 記録の単位（形）。担当者が自分でつくるので参加者なら書ける */
+        match /geom/{doc} {
+          allow read:  if isMember();
+          allow write: if isMember();
+        }
+        /* 配った・配っていないの記録 */
+        match /stat/{doc} {
+          allow read:  if isMember();
+          allow write: if isMember();
+        }
+      }
+    }
+
+    /* ほかのパスは触らせない */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
