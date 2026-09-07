@@ -104,20 +104,43 @@ header.top{padding:26px 0 16px}
 .maptools .iconbtn{box-shadow:0 2px 8px -4px rgba(20,24,43,.6)}
 .legend{position:absolute;left:10px;bottom:10px;z-index:600;background:rgba(255,255,255,.94);
   border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:11.5px;display:flex;gap:10px;color:var(--slate)}
-.drawbar{position:absolute;left:10px;right:10px;top:10px;z-index:700;background:var(--paper);
-  border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--card-shadow)}
-.drawbar h3{font-size:13px;font-weight:700;margin-bottom:6px}
-.drawbar .muted{margin-bottom:8px}
+/* 描画中は地図を全面に出し、操作は画面下の細い帯にまとめる */
+.drawbar{
+  position:absolute;left:0;right:0;bottom:0;z-index:700;background:var(--paper);
+  border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  box-shadow:0 -10px 26px -20px rgba(20,24,43,.9)
+}
+.drawhead{display:flex;align-items:baseline;gap:8px;margin-bottom:5px}
+.drawhead b{font-size:13px;font-weight:700;flex:none}
+.drawhead span.h{font-size:11.5px;color:var(--slate);flex:1;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawhead span.n{font-size:11.5px;color:var(--slate);flex:none}
+.drawrow{display:flex;gap:6px}
+.drawrow+.drawrow{margin-top:6px}
+.drawrow .btn{flex:1;min-width:0;padding:8px 4px;font-size:13px;white-space:nowrap}
+
+body.drawing .legend{display:none}
+body.drawing #btnBase,body.drawing #btnFit{display:none}
+body.drawing .leaflet-control-zoom{display:none}
+body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 4px)}
+/* 描画中はヘッダも隠して、地図に使える高さを稼ぐ（表題は帯の中に出ている） */
+@media (max-width:859px){
+  body.drawing .panel{display:none}
+  body.drawing .topbar{display:none}
+}
 
 .panel{flex:0 0 auto;background:var(--paper);border-top:1px solid var(--line);
-  display:flex;flex-direction:column;max-height:56dvh}
+  display:flex;flex-direction:column;max-height:48dvh}
+.panel.collapsed{max-height:none;height:auto!important}
+.panel.collapsed .tabbody{display:none}
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:none}
 .tabs button{flex:1;border:0;background:transparent;padding:11px 4px;font-size:13.5px;font-weight:500;
   color:var(--slate);cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--solid)}
 .tabbody{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
-.grabber{height:16px;display:grid;place-items:center;cursor:ns-resize;flex:none;touch-action:none}
-.grabber i{display:block;width:38px;height:4px;border-radius:2px;background:var(--line)}
+.grabber{height:20px;display:grid;place-items:center;cursor:ns-resize;flex:none;touch-action:none}
+.grabber i{display:block;width:44px;height:4px;border-radius:2px;background:var(--line);transition:background .15s}
+.grabber:active i{background:var(--slate)}
 
 /* 区域・仲間の行 */
 .item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--paper)}
@@ -226,16 +249,20 @@ header.top{padding:26px 0 16px}
       </div>
       <div class="legend" id="legend"></div>
       <div class="drawbar hide" id="drawbar">
-        <h3 id="drawTitle">区域を囲む</h3>
-        <p class="muted" id="drawHelp"></p>
-        <div class="row wrap">
-          <button class="btn sm" id="drawModeTap">点を置く</button>
-          <button class="btn sm" id="drawModeTrace">なぞる</button>
-          <button class="btn sm" id="drawSnap">道に合わせる：入</button>
-          <button class="btn sm" id="drawUndo">1つ戻す</button>
-          <span class="grow"></span>
-          <button class="btn sm" id="drawCancel">やめる</button>
-          <button class="btn sm primary" id="drawDone">決定</button>
+        <div class="drawhead">
+          <b id="drawTitle">区域を囲む</b>
+          <span class="h" id="drawHelp"></span>
+          <span class="n mono" id="drawCount"></span>
+        </div>
+        <div class="drawrow">
+          <button class="btn" id="drawModeTap">点を置く</button>
+          <button class="btn" id="drawModeTrace">なぞる</button>
+          <button class="btn" id="drawSnap">道に沿う</button>
+        </div>
+        <div class="drawrow">
+          <button class="btn" id="drawUndo">1つ戻す</button>
+          <button class="btn" id="drawCancel">やめる</button>
+          <button class="btn primary" id="drawDone">決定</button>
         </div>
       </div>
     </div>
@@ -1137,8 +1164,13 @@ const Draw = {
     this.snap = opts.snap!==false;
     $("#drawbar").classList.remove("hide");
     $("#drawTitle").textContent = opts.title||"区域を囲む";
-    $("#drawHelp").textContent  = opts.help||"地図をタップして角を置き、最後に「決定」。「なぞる」に切り替えると指でなぞれます。";
+    $("#drawHelp").textContent  = opts.help||"タップして角を置く";
     document.body.classList.add("drawing");
+    setTimeout(()=>{
+      map.invalidateSize();
+      /* 地図の出典表示が帯に隠れないよう、実際の帯の高さを渡す */
+      document.documentElement.style.setProperty("--drawbar-h", $("#drawbar").offsetHeight+"px");
+    }, 30);
     this.paint(); this.syncBtns();
     map.on("click", this._click, this);
     map.getContainer().addEventListener("pointerdown", this._down, true);
@@ -1147,7 +1179,7 @@ const Draw = {
     $("#drawModeTap").classList.toggle("on", this.kind==="tap");
     $("#drawModeTrace").classList.toggle("on", this.kind==="trace");
     $("#drawSnap").classList.toggle("on", this.snap);
-    $("#drawSnap").textContent = "道に合わせる："+(this.snap?"入":"切");
+    $("#drawSnap").textContent = this.snap ? "道に沿う：入" : "道に沿う：切";
   },
   setKind(k){
     this.kind=k;
@@ -1155,8 +1187,8 @@ const Draw = {
     else { map.dragging.enable(); map.doubleClickZoom.enable(); }
     this.syncBtns();
     $("#drawHelp").textContent = k==="trace"
-      ? "地図の上を指（またはマウス）でなぞってください。離すと形が確定します。"
-      : "地図をタップして角を置き、最後に「決定」。";
+      ? "指でなぞる。離すと確定"
+      : "タップして角を置く";
   },
   _click(e){ if(this.kind!=="tap") return; this.pts.push([e.latlng.lat, e.latlng.lng]); this.paint(); },
   _down(ev){
@@ -1187,8 +1219,9 @@ const Draw = {
     if(this.pts.length>1)
       L.polygon(this.pts, {color:"#2F5BFF", weight:3, dashArray:"6 4", fillColor:"#2F5BFF", fillOpacity:.08}).addTo(gDraw);
     if(this.kind==="tap")
-      this.pts.forEach((p,i)=> L.circleMarker(p,{radius:5,color:"#fff",weight:2,fillColor:"#2F5BFF",fillOpacity:1}).addTo(gDraw));
+      this.pts.forEach((p,i)=> L.circleMarker(p,{radius:6,color:"#fff",weight:2,fillColor:"#2F5BFF",fillOpacity:1}).addTo(gDraw));
     $("#drawDone").disabled = this.pts.length<3;
+    $("#drawCount").textContent = this.pts.length ? this.pts.length+"点" : "";
   },
   undo(){ this.pts.pop(); this.paint(); },
   stop(){
@@ -1196,6 +1229,7 @@ const Draw = {
     gDraw.clearLayers();
     $("#drawbar").classList.add("hide");
     document.body.classList.remove("drawing");
+    setTimeout(()=>map.invalidateSize(), 30);
     map.off("click", this._click, this);
     map.getContainer().removeEventListener("pointerdown", this._down, true);
     map.dragging.enable(); map.doubleClickZoom.enable();
@@ -1882,12 +1916,27 @@ async function boot(){
 
   /* パネルの高さを引っぱって変える */
   const grab=$("#grabber"), panel=$("#panel");
+  const togglePanel=()=>{
+    panel.classList.toggle("collapsed");
+    if(!panel.classList.contains("collapsed") && !panel.style.height)
+      panel.style.maxHeight=""; /* 既定の高さに戻す */
+    setTimeout(()=>map.invalidateSize(), 30);
+  };
   grab.addEventListener("pointerdown", e=>{
     grab.setPointerCapture(e.pointerId);
     const y0=e.clientY, h0=panel.getBoundingClientRect().height;
-    const mv=ev=>{ const h=clamp(h0+(y0-ev.clientY), 90, window.innerHeight*0.85);
-                   panel.style.maxHeight=h+"px"; panel.style.height=h+"px"; map.invalidateSize(); };
-    const up=()=>{ grab.removeEventListener("pointermove",mv); grab.removeEventListener("pointerup",up); };
+    let moved=false;
+    const mv=ev=>{
+      if(Math.abs(ev.clientY-y0) < 6 && !moved) return;
+      moved=true;
+      panel.classList.remove("collapsed");
+      const h=clamp(h0+(y0-ev.clientY), 56, window.innerHeight*0.85);
+      panel.style.maxHeight=h+"px"; panel.style.height=h+"px"; map.invalidateSize();
+    };
+    const up=()=>{
+      grab.removeEventListener("pointermove",mv); grab.removeEventListener("pointerup",up);
+      if(!moved) togglePanel();          /* 引っぱらずに押しただけならたたむ／開く */
+    };
     grab.addEventListener("pointermove",mv); grab.addEventListener("pointerup",up);
   });
 
