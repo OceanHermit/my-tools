@@ -95,9 +95,8 @@ html.app-open, html.app-open body{height:100%;overflow:hidden;overscroll-behavio
   display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);
   border-bottom:1px solid var(--line);flex:none;padding-top:max(8px,env(safe-area-inset-top))
 }
-.topbar .who{flex:1;min-width:0}
-.topbar .who b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.topbar .who span{font-size:11px;color:var(--slate);letter-spacing:.14em}
+.modesw{flex:1;min-width:0;max-width:260px;margin:0 auto}
+.modesw button{padding:7px 4px}
 .iconbtn{border:1px solid var(--line);background:var(--paper);border-radius:9px;width:34px;height:34px;
   display:grid;place-items:center;cursor:pointer;flex:none;font-size:15px}
 
@@ -185,6 +184,13 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 .sr li b{display:block;font-weight:700}
 .sr li span{color:var(--slate);font-size:12px}
 
+/* 配る画面のいちばん上：地区ぜんたいの進み具合 */
+.total{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--field);margin-bottom:12px}
+.total .hd{display:flex;align-items:baseline;gap:8px}
+.total .hd b{font-size:13px;font-weight:700}
+.total .hd .mono{margin-left:auto;font-size:15px;font-weight:700}
+.total p{margin-top:4px}
+
 .banner{background:#FCF4E8;color:#7A5417;border:1px solid #EBD9B8;border-radius:12px;padding:10px 12px;font-size:12.5px}
 .banner+*{margin-top:12px}
 
@@ -262,9 +268,11 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
   <div class="stack">
     <div class="topbar">
       <button class="iconbtn" id="btnHome" title="ホームへ">‹</button>
-      <div class="who"><b id="pjName">—</b><span class="mono" id="pjCode"></span></div>
-      <button class="iconbtn" id="btnShare" title="コードを配る">⇪</button>
-      <button class="iconbtn" id="btnMenu" title="設定">⋯</button>
+      <div class="seg modesw" id="modesw">
+        <button data-view="prep">準備</button>
+        <button data-view="go" class="on">配る</button>
+      </div>
+      <button class="iconbtn" id="btnMenu" title="この地区について">⋯</button>
     </div>
 
     <div id="mapwrap">
@@ -299,13 +307,13 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 
   <div class="panel" id="panel">
     <div class="grabber" id="grabber"><i></i></div>
-    <div class="tabs">
-      <button data-tab="mine" class="on">配る</button>
-      <button data-tab="areas">区域</button>
+    <div class="tabs hide" id="tabs">
+      <button data-tab="areas" class="on">区域</button>
       <button data-tab="mem">仲間</button>
     </div>
     <div class="tabbody" id="tab-mine"></div>
     <div class="tabbody hide" id="tab-areas"></div>
+    <!-- 準備＝区域と仲間、配る＝自分の区画。上のスイッチで入れ替える -->
     <div class="tabbody hide" id="tab-mem"></div>
   </div>
 </div>
@@ -1083,7 +1091,7 @@ function pushRecent(code, name){
    ========================================================================= */
 const S = {
   code:null, project:null, members:{}, areas:{}, uid:null,
-  tab:"mine", activeAreaId:null, mode:"road",
+  view:"go", viewInit:false, tab:"areas", activeAreaId:null, mode:"road",
   units:[], stat:{}, unitLayers:{},
   off:null, offStat:null,
   autoWalk:false, pos:null, posAcc:0,
@@ -1133,6 +1141,22 @@ function fitRing(ring, pad){
 /* --- 区域を描く --- */
 function drawAreas(){
   gArea.clearLayers();
+  /* 配るときは、いま開いている区画だけをはっきり出す。
+     ほかは向きが分かる程度の細い線にとどめ、押し間違いも防ぐ */
+  if(S.view==="go"){
+    for(const a of areaList()){
+      const ring=ringOf(a); if(ring.length<3) continue;
+      if(a.id===S.activeAreaId) continue;
+      if(!a.parent && childrenOf(a.id).length) continue;
+      L.polygon(ring, {color:"#98A1B8", weight:1, opacity:.45, fill:false, interactive:false}).addTo(gArea);
+    }
+    const act=S.areas[S.activeAreaId], ring=act?ringOf(act):[];
+    if(ring.length>=3){
+      const c = act.uid ? memberColor(act.uid) : "#59627E";
+      L.polygon(ring, {color:c, weight:3, opacity:.95, fillColor:c, fillOpacity:0.04, interactive:false}).addTo(gArea);
+    }
+    return;
+  }
   for(const a of parents()){
     const ring=ringOf(a); if(ring.length<3) continue;
     const sel = S.activeAreaId===a.id;
@@ -1156,6 +1180,7 @@ function drawAreas(){
 /* --- 単位を描く --- */
 function drawUnits(){
   gUnit.clearLayers(); S.unitLayers={};
+  if(S.view!=="go") return;          /* 準備のときは形だけを見せる */
   const area = S.areas[S.activeAreaId];
   if(!area || !S.units.length) return;
   for(const u of S.units){
@@ -1302,13 +1327,41 @@ const MODE_LABEL = {road:"道すじ", block:"区画", pin:"建物"};
 
 function render(){
   if(!S.project) return;
-  $("#pjName").textContent = S.project.name || "（名前なし）";
-  $("#pjCode").textContent = S.code;
   renderMine(); renderAreas(); renderMembers(); renderLegend();
 }
+
+/* 準備：区域と仲間／配る：自分の区画。上のスイッチで入れ替える */
+function setView(v){
+  S.view = v;
+  if(S.code) localStorage.setItem(LS_PREFIX+"view:"+S.code, v);
+  $$("#modesw button").forEach(b=> b.classList.toggle("on", b.dataset.view===v));
+  const go = v==="go";
+  $("#tabs").classList.toggle("hide", go);
+  $("#tab-mine").classList.toggle("hide", !go);
+  if(go){ $("#tab-areas").classList.add("hide"); $("#tab-mem").classList.add("hide"); }
+  else setTab(S.tab);
+  drawAreas(); drawUnits(); render();
+  setTimeout(()=>map.invalidateSize(), 30);
+}
+
+/* 地区ぜんたいの合計。親のうち子を持つものは二重に数えないよう外す */
+function districtTotal(){
+  let t=0, d=0;
+  for(const a of areaList()){
+    if(!a.parent && childrenOf(a.id).length) continue;
+    if(a.id===S.activeAreaId && S.units.length){ const c=countStat(); t+=S.units.length; d+=c[1]; }
+    else { t+=a.total|0; d+=a.done|0; }
+  }
+  return {t, d, pct: t? Math.round(d/t*100) : null};
+}
 function renderLegend(){
+  if(S.view!=="go"){
+    const n=areaList().filter(a=>a.parent||!childrenOf(a.id).length).length;
+    $("#legend").innerHTML = n? '<span>区画 '+n+'</span>' : '<span>区域をつくってください</span>';
+    return;
+  }
   const a=S.areas[S.activeAreaId];
-  if(!a || !S.units.length){ $("#legend").innerHTML = '<span>区域を選ぶと記録できます</span>'; return; }
+  if(!a || !S.units.length){ $("#legend").innerHTML = '<span>区画を選ぶと記録できます</span>'; return; }
   const c=countStat();
   $("#legend").innerHTML =
     ['<span><i class="dot" style="background:'+ST_COLOR[1]+'"></i> 済 '+c[1]+'</span>',
@@ -1335,9 +1388,14 @@ function renderMine(){
 
   let h="";
   if(!areaList().length){
-    h = '<div class="banner">まだ区域がありません。<b>「区域」タブ</b>で、配る範囲を決めてください。</div>';
+    h = '<div class="banner">まだ区域がありません。上の<b>「準備」</b>に切り替えて、配る範囲を決めてください。</div>';
     host.innerHTML=h; return;
   }
+  const tot=districtTotal();
+  if(tot.pct!==null)
+    h += '<div class="total"><div class="hd"><b>地区ぜんたい</b><span class="mono">'+tot.pct+'%</span></div>'
+       + '<div class="bar"><i style="width:'+tot.pct+'%"></i></div>'
+       + '<p class="muted mono">'+tot.d.toLocaleString()+' / '+tot.t.toLocaleString()+'</p></div>';
   if(!mine.length && others.length)
     h += '<div class="banner">あなたに割り当てられた区画がありません。下から選んで記録するか、管理者に割り当ててもらってください。</div>';
 
@@ -1404,7 +1462,7 @@ function renderAreas(){
   let h="";
   if(!isAdmin()){
     h += '<div class="banner">区域をつくれるのは管理者だけです。'
-       + '必要なら、いまの管理者に「仲間」タブから管理者にしてもらってください。</div>';
+       + '必要なら、いまの管理者に「仲間」から管理者にしてもらってください。</div>';
   }else{
     h += '<div class="row wrap" style="gap:6px;margin-bottom:12px">'
        + '<button class="btn sm primary" id="btnSearchArea">地名・住所で探す</button>'
@@ -1695,7 +1753,6 @@ function drawNewArea(parentId){
       setTimeout(()=>{ selectArea(id); fitRing(ring); }, 250);
     }
   });
-  setTab("mine");
 }
 function redrawArea(a){
   if(!a) return;
@@ -1820,9 +1877,11 @@ function promptSplit(defN, kidCount){
    12. タブ・画面まわり
    ========================================================================= */
 function setTab(t){
+  if(t!=="areas" && t!=="mem") t="areas";
   S.tab=t;
   $$(".tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
-  ["mine","areas","mem"].forEach(k=> $("#tab-"+k).classList.toggle("hide", k!==t));
+  ["areas","mem"].forEach(k=> $("#tab-"+k).classList.toggle("hide", k!==t));
+  $("#tab-mine").classList.add("hide");
 }
 function showScreen(id){
   $$(".screen").forEach(s=>s.classList.toggle("on", s.id===id));
@@ -1834,7 +1893,7 @@ async function openProject(code, myName){
   const pj = await Store.joinProject(code, myName);
   if(!pj){ toast("その合言葉コードの地区は見つかりませんでした", 4000); return false; }
   if(S.off) S.off();
-  S.code=code; S.uid=Store.uid;
+  S.code=code; S.uid=Store.uid; S.viewInit=false;
   pushRecent(code, pj.name);
   location.hash = code;
   S.off = Store.watch(code, snap=>{
@@ -1850,9 +1909,16 @@ async function openProject(code, myName){
         if(all.length) fitRing(all);
       }
     }
+    /* 最初の1回だけ、どちらの画面で始めるかを決める。
+       担当の区画があれば「配る」、無ければ「準備」から。前回の選択があればそれを継ぐ */
+    if(!S.viewInit){
+      S.viewInit = true;
+      const saved = localStorage.getItem(LS_PREFIX+"view:"+code);
+      const mine  = areaList().filter(a=>a.parent && a.uid===S.uid);
+      setView(saved || (mine.length ? "go" : "prep"));
+    }
   });
   showScreen("app");
-  setTab("mine");
   return true;
 }
 
@@ -1909,7 +1975,7 @@ async function boot(){
 
   /* 上のバー */
   $("#btnHome").onclick = ()=>{ location.hash=""; showScreen("home"); renderRecents(); };
-  $("#btnShare").onclick = ()=>{ setTab("mem"); $("#tab-mem").scrollTop = 99999; };
+  $$("#modesw button").forEach(b=> b.onclick=()=>setView(b.dataset.view));
   $("#btnMenu").onclick = async ()=>{
     const ok = await modal('<h2>この地区について</h2>'
       + '<p class="muted">名前：'+esc(S.project.name)+'<br>コード：<b class="mono">'+esc(S.code)+'</b><br>'
