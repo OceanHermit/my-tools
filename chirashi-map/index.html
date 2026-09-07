@@ -191,6 +191,32 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 .total .hd .mono{margin-left:auto;font-size:15px;font-weight:700}
 .total p{margin-top:4px}
 
+/* 仲間の一覧（配る画面） */
+.mates{margin-bottom:12px}
+.mates .cap{display:flex;align-items:center;gap:8px;margin:0 2px 6px}
+.mates .cap b{font-size:12.5px;color:var(--slate);letter-spacing:.06em}
+.mate{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--paper);
+  border-radius:11px;padding:8px 10px;cursor:pointer;font:inherit;color:inherit}
+.mate+.mate{margin-top:6px}
+.mate:disabled{cursor:default}
+.mate .hd{display:flex;align-items:center;gap:7px}
+.mate .hd b{font-size:13.5px;font-weight:700;flex:1;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mate .hd .mono{font-size:13px;font-weight:700;flex:none}
+.mate .bar{height:5px;margin-top:6px}
+.pill.warn{background:#FCE9E4;color:#9C3B32}
+.pill.live{background:#E4F2EC;color:#12664A}
+.pill.old{background:var(--field);color:var(--slate)}
+
+/* 位置を共有している間、地図の上に出しつづける印 */
+.livechip{position:absolute;left:10px;top:10px;z-index:600;display:flex;align-items:center;gap:8px;
+  background:var(--done);color:#fff;border-radius:999px;padding:6px 8px 6px 12px;font-size:12px;
+  box-shadow:0 2px 10px -4px rgba(20,24,43,.7)}
+.livechip button{border:0;background:rgba(255,255,255,.22);color:#fff;border-radius:999px;
+  padding:3px 10px;font-size:11.5px;cursor:pointer;font:inherit;font-size:11.5px}
+.livechip .blip{width:8px;height:8px;border-radius:50%;background:#fff;animation:blip 1.8s infinite}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.25}}
+
 .banner{background:#FCF4E8;color:#7A5417;border:1px solid #EBD9B8;border-radius:12px;padding:10px 12px;font-size:12.5px}
 .banner+*{margin-top:12px}
 
@@ -283,6 +309,9 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
         <button class="iconbtn" id="btnFit" title="区域全体を表示">⤢</button>
       </div>
       <div class="legend" id="legend"></div>
+      <div class="livechip hide" id="livechip">
+        <i class="blip"></i>現在地を共有中<button id="btnStopShare">やめる</button>
+      </div>
       <div class="drawbar hide" id="drawbar">
         <div class="drawhead">
           <b id="drawTitle">区域を囲む</b>
@@ -884,7 +913,7 @@ const Local = {
   read(c){ try{ return JSON.parse(localStorage.getItem(Local.key(c))||"null"); }catch(e){ return null; } },
   write(c,v){ localStorage.setItem(Local.key(c), JSON.stringify(v));
               window.dispatchEvent(new CustomEvent("local-store", {detail:{code:c}})); },
-  blank(){ return {project:null, members:{}, areas:{}, units:{}, stat:{}}; }
+  blank(){ return {project:null, members:{}, areas:{}, units:{}, stat:{}, live:{}}; }
 };
 
 const Store = {
@@ -1063,6 +1092,28 @@ const Store = {
       Local.write(code,d);
     }
   },
+  /* --- 現在地の共有（入れている人の分だけ置かれる） --- */
+  async setLive(code, rec){
+    if(this.remote) await this.base(code).collection("live").doc(this.uid).set(rec);
+    else { const d=Local.read(code); d.live=d.live||{}; d.live[this.uid]=rec; Local.write(code,d); }
+  },
+  async clearLive(code){
+    if(!code) return;
+    if(this.remote){ try{ await this.base(code).collection("live").doc(this.uid).delete(); }catch(e){} }
+    else { const d=Local.read(code); if(d&&d.live){ delete d.live[this.uid]; Local.write(code,d); } }
+  },
+  watchLive(code, cb){
+    if(this.remote){
+      return this.base(code).collection("live").onSnapshot(s=>{
+        const out={}; s.forEach(d=>out[d.id]=d.data()); cb(out);
+      }, ()=>cb({}));
+    }
+    const emit=()=>{ const d=Local.read(code)||Local.blank(); cb(Object.assign({}, d.live||{})); };
+    const h=e=>{ if(e.detail.code===code) emit(); };
+    window.addEventListener("local-store", h); emit();
+    return ()=>window.removeEventListener("local-store", h);
+  },
+
   watchStatus(code, areaId, mode, cb){
     if(this.remote){
       return this.base(code).collection("areas").doc(areaId).collection("stat").onSnapshot(s=>{
@@ -1095,6 +1146,7 @@ const S = {
   units:[], stat:{}, unitLayers:{},
   off:null, offStat:null,
   autoWalk:false, pos:null, posAcc:0,
+  live:{}, offLive:null, share:false, shareWatch:null, shareLast:null, shareSent:0, shareMoved:0, shareStart:0,
   busy:false
 };
 const meMember = () => S.members[S.uid] || {name:"（あなた）", color:MEMBER_COLORS[0], admin:false};
@@ -1109,7 +1161,7 @@ const memberName  = uid => (S.members[uid] && S.members[uid].name) || "未割り
 /* =========================================================================
    8. 地図
    ========================================================================= */
-let map, gArea, gUnit, gDraw, meMarker, meCircle;
+let map, gArea, gUnit, gDraw, gLive, meMarker, meCircle;
 const BASES = {};
 let baseName = localStorage.getItem(LS_PREFIX+"base") || "pale";
 
@@ -1127,6 +1179,7 @@ function initMap(){
   gArea = L.layerGroup().addTo(map);
   gUnit = L.layerGroup().addTo(map);
   gDraw = L.layerGroup().addTo(map);
+  gLive = L.layerGroup().addTo(map);
 }
 function setBase(n){
   for(const k in BASES) if(map.hasLayer(BASES[k])) map.removeLayer(BASES[k]);
@@ -1396,6 +1449,7 @@ function renderMine(){
     h += '<div class="total"><div class="hd"><b>地区ぜんたい</b><span class="mono">'+tot.pct+'%</span></div>'
        + '<div class="bar"><i style="width:'+tot.pct+'%"></i></div>'
        + '<p class="muted mono">'+tot.d.toLocaleString()+' / '+tot.t.toLocaleString()+'</p></div>';
+  h += renderMates();
   if(!mine.length && others.length)
     h += '<div class="banner">あなたに割り当てられた区画がありません。下から選んで記録するか、管理者に割り当ててもらってください。</div>';
 
@@ -1454,6 +1508,60 @@ function renderMine(){
   const bw=$("#btnWalk",host);  if(bw) bw.onclick=toggleWalk;
   const bv=$("#btnViewDone",host); if(bv) bv.onclick=markVisibleDone;
   const bre=$("#btnReset",host);if(bre) bre.onclick=resetArea;
+  const bs=$("#btnShare",host); if(bs) bs.onclick=toggleShare;
+  $$("[data-mate]",host).forEach(b=> b.onclick=()=>goToMate(b.dataset.mate));
+}
+
+/* 仲間の行を押したら、その人の居場所（無ければ担当区画）へ地図を寄せる */
+function goToMate(uid){
+  const lv=S.live[uid];
+  if(lv && typeof lv.lat==="number"){
+    map.setView([lv.lat,lv.lng], Math.max(map.getZoom(),17));
+    toast(memberName(uid)+"の現在地（"+relTime(lv.at)+"）");
+    return;
+  }
+  const a=areaList().find(x=>x.uid===uid);
+  if(a){ fitRing(ringOf(a)); toast(memberName(uid)+"の区画"); }
+  else toast(memberName(uid)+"の居場所も区画も分かりません");
+}
+
+/* 仲間の進み具合と居場所。歩きながら見るので1人1行にとどめる */
+function statsOf(uid){
+  let t=0, d=0, at=0;
+  for(const a of areaList()){
+    if(a.uid!==uid) continue;
+    if(a.id===S.activeAreaId && S.units.length){ const c=countStat(); t+=S.units.length; d+=c[1]; at=Math.max(at,Date.now()); }
+    else { t+=a.total|0; d+=a.done|0; at=Math.max(at, a.at|0); }
+  }
+  return {t, d, at, pct: t? Math.round(d/t*100) : null};
+}
+function renderMates(){
+  const uids=Object.keys(S.members);
+  if(uids.length<2) return "";
+  const order=[S.uid].concat(uids.filter(u=>u!==S.uid));
+  let h='<div class="mates"><div class="cap"><b>仲間 '+uids.length+'人</b><span class="grow" style="flex:1"></span>'
+      + '<button class="chk'+(S.share?" on":"")+'" id="btnShare"><i>✓</i>現在地を知らせる</button></div>';
+  for(const uid of order){
+    const m=S.members[uid]; if(!m) continue;
+    const st=statsOf(uid), lv=S.live[uid];
+    const chips=[];
+    if(lv && typeof lv.lat==="number"){
+      const age=Date.now()-(lv.at||0);
+      chips.push('<span class="pill '+(age>STALE_MS?"old":"live")+'">現在地 '+esc(relTime(lv.at))+'</span>');
+      if(lv.mv && Date.now()-lv.mv > STILL_MS)
+        chips.push('<span class="pill warn">'+minsSince(lv.mv)+'分 動きなし</span>');
+    }else if(st.at){
+      chips.push('<span class="pill old">記録 '+esc(relTime(st.at))+'</span>');
+    }
+    h += '<button class="mate" data-mate="'+esc(uid)+'"'+((lv&&typeof lv.lat==="number")||areaList().some(a=>a.uid===uid)?"":" disabled")+'>'
+       + '<div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
+       + '<b>'+esc(m.name||"名なし")+(uid===S.uid?"（あなた）":"")+'</b>'
+       + chips.join("")
+       + '<span class="mono">'+(st.pct!==null? st.pct+"%" : "—")+'</span></div>'
+       + (st.pct!==null? '<div class="bar"><i style="width:'+st.pct+'%"></i></div>' : '')
+       + '</button>';
+  }
+  return h+'</div>';
 }
 
 /* ---------- 「区域」タブ ---------- */
@@ -1540,13 +1648,14 @@ function renderMembers(){
   for(const uid in S.members){
     const m=S.members[uid];
     const mine=areaList().filter(a=>a.uid===uid);
-    let t=0,d=0; for(const a of mine){ t+=a.total|0; d+=a.done|0; }
-    const pct = t? Math.round(d/t*100) : null;
+    const st=statsOf(uid), lv=S.live[uid], pct=st.pct, t=st.t, d=st.d;
     h += '<div class="item"><div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
        + '<b>'+esc(m.name||"名なし")+'</b>'
        + (m.admin?'<span class="pill">管理者</span>':'')
        + (uid===S.uid?'<span class="pill">あなた</span>':'')+'</div>'
-       + '<p class="muted">担当 '+mine.length+' 区画'+(pct!==null?'／'+d+' of '+t+'（'+pct+'%）':'')+'</p>'
+       + '<p class="muted">担当 '+mine.length+' 区画'+(pct!==null?'／'+d+' of '+t+'（'+pct+'%）':'')
+       + (lv&&typeof lv.lat==="number" ? '　現在地 '+esc(relTime(lv.at))
+          : (st.at? '　記録 '+esc(relTime(st.at)) : ''))+'</p>'
        + (pct!==null?'<div class="bar"><i style="width:'+pct+'%"></i></div>':'')
        + (isAdmin() && uid!==S.project.ownerUid
           ? '<div class="row" style="margin-top:8px"><button class="btn sm" data-adm="'+esc(uid)+'" data-to="'+(m.admin?"0":"1")+'">'
@@ -1615,7 +1724,7 @@ function pushCounts(){
   countsTimer=setTimeout(()=>{
     const a=S.areas[S.activeAreaId]; if(!a||!S.units.length) return;
     const c=countStat();
-    Store.patchArea(S.code, a.id, {total:S.units.length, done:c[1], skip:c[2], mode:S.mode});
+    Store.patchArea(S.code, a.id, {total:S.units.length, done:c[1], skip:c[2], mode:S.mode, at:Date.now()});
   }, 1200);
 }
 
@@ -1713,6 +1822,82 @@ function autoMark(pos, radius){
   S.units.forEach(restyleUnit); renderLegend(); renderMine(); pushCounts();
   Store.setStatusMany(S.code, S.activeAreaId, S.mode, hits, meMember().name);
 }
+/* =========================================================================
+   11b. 現在地の共有（本人が入れたときだけ）
+   ========================================================================= */
+const SHARE_MAX_MS = 4*3600*1000;   /* 入れっぱなしを防ぐ自動停止 */
+const STALE_MS     = 5*60*1000;     /* これより古い位置は薄く出す */
+const STILL_MS     = 20*60*1000;    /* これだけ動いていなければ知らせる */
+const SEND_EVERY   = 45*1000;
+const SEND_MOVE_M  = 25;
+
+function relTime(t){
+  if(!t) return "";
+  const s=Math.floor((Date.now()-t)/1000);
+  if(s<45) return "たった今";
+  if(s<3600) return Math.round(s/60)+"分前";
+  if(s<86400) return Math.round(s/3600)+"時間前";
+  return Math.round(s/86400)+"日前";
+}
+function minsSince(t){ return Math.floor((Date.now()-t)/60000); }
+
+async function toggleShare(){
+  if(S.share){ stopShare(); toast("現在地の共有をやめました"); return; }
+  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+  const ok = await modal('<h2>現在地を仲間に知らせる</h2>'
+    + '<p class="muted">入れている間、あなたのいる場所が、この地区の仲間の地図に出ます。'
+    + '進んでいない人を手伝いに行ったり、様子がおかしいときに向かうためのものです。</p>'
+    + '<ul class="muted" style="margin:10px 0 0;padding-left:18px">'
+    + '<li>やめればすぐ消えます。アプリを閉じたときも消えます</li>'
+    + '<li>4時間たつと自動で止まります</li>'
+    + '<li>知らせるのは、いる場所と時刻だけです</li>'
+    + '<li>入れている間、画面に「共有中」が出つづけます</li></ul>',
+    {ok:"知らせる", cancel:"やめておく"});
+  if(!ok) return;
+  startShare();
+}
+function startShare(){
+  S.share=true; S.shareStart=Date.now(); S.shareLast=null; S.shareSent=0; S.shareMoved=Date.now();
+  $("#livechip").classList.remove("hide");
+  S.shareWatch = navigator.geolocation.watchPosition(p=>{
+    const pos=[p.coords.latitude, p.coords.longitude];
+    S.pos=pos; S.posAcc=p.coords.accuracy; showMe(pos, p.coords.accuracy);
+    if(Date.now()-S.shareStart > SHARE_MAX_MS){ stopShare(); toast("4時間たったので現在地の共有を止めました",5000); return; }
+    const moved = S.shareLast ? distM(S.shareLast,pos) : Infinity;
+    if(moved > SEND_MOVE_M) S.shareMoved=Date.now();
+    if(moved <= SEND_MOVE_M && Date.now()-S.shareSent < SEND_EVERY) return;
+    S.shareLast=pos; S.shareSent=Date.now();
+    Store.setLive(S.code, {lat:+pos[0].toFixed(5), lng:+pos[1].toFixed(5),
+      acc:Math.round(p.coords.accuracy||0), at:Date.now(), mv:S.shareMoved, name:meMember().name||""});
+  }, e=>{ toast("現在地をとれませんでした（"+e.message+"）",4000); stopShare(); },
+     {enableHighAccuracy:true, maximumAge:5000, timeout:25000});
+  renderMine();
+}
+function stopShare(){
+  if(S.shareWatch!=null) navigator.geolocation.clearWatch(S.shareWatch);
+  S.shareWatch=null; S.share=false;
+  $("#livechip").classList.add("hide");
+  Store.clearLive(S.code);
+  renderMine();
+}
+
+/* 仲間の居場所を地図に出す。古い位置は薄く、動きがないときは印をつける */
+function drawLive(){
+  gLive.clearLayers();
+  for(const uid in S.live){
+    if(uid===S.uid) continue;
+    const lv=S.live[uid]; if(!lv || typeof lv.lat!=="number") continue;
+    const age=Date.now()-(lv.at||0), stale=age>STALE_MS;
+    const c=memberColor(uid), nm=(S.members[uid]&&S.members[uid].name)||lv.name||"仲間";
+    const still = lv.mv && (Date.now()-lv.mv > STILL_MS);
+    L.circleMarker([lv.lat,lv.lng], {radius: stale?7:9, color:"#fff", weight:2.5,
+      fillColor: still ? "#B4453F" : c, fillOpacity: stale?0.45:1})
+      .bindTooltip(nm+"／"+relTime(lv.at)+(still?"・動きなし":""),
+                   {permanent:true, direction:"top", offset:[0,-6], className:"unitlabel"})
+      .addTo(gLive);
+  }
+}
+
 async function markVisibleDone(){
   const b=map.getBounds();
   const inView = S.units.filter(u=>{
@@ -1896,6 +2081,8 @@ async function openProject(code, myName){
   S.code=code; S.uid=Store.uid; S.viewInit=false;
   pushRecent(code, pj.name);
   location.hash = code;
+  if(S.offLive) S.offLive();
+  S.offLive = Store.watchLive(code, live=>{ S.live=live||{}; drawLive(); renderMine(); renderMembers(); });
   S.off = Store.watch(code, snap=>{
     S.project = snap.project; S.members = snap.members||{}; S.areas = snap.areas||{};
     if(!S.project) return;
@@ -1974,7 +2161,8 @@ async function boot(){
   renderRecents();
 
   /* 上のバー */
-  $("#btnHome").onclick = ()=>{ location.hash=""; showScreen("home"); renderRecents(); };
+  $("#btnHome").onclick = ()=>{ if(S.share) stopShare(); location.hash=""; showScreen("home"); renderRecents(); };
+  $("#btnStopShare").onclick = ()=>{ stopShare(); toast("現在地の共有をやめました"); };
   $$("#modesw button").forEach(b=> b.onclick=()=>setView(b.dataset.view));
   $("#btnMenu").onclick = async ()=>{
     const ok = await modal('<h2>この地区について</h2>'
@@ -2060,7 +2248,13 @@ function exportJSON(){
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
 }
 
-window.addEventListener("beforeunload", ()=>{ if(S.autoWalk) stopWalk(); });
+/* 画面を閉じたら現在地の共有も止める（置き去りにしない） */
+function onLeave(){ if(S.autoWalk) stopWalk(); if(S.share) Store.clearLive(S.code); }
+window.addEventListener("beforeunload", onLeave);
+window.addEventListener("pagehide", onLeave);
+/* 「◯分前」の表示を1分ごとに更新する */
+setInterval(()=>{ if(S.project && Object.keys(S.live).length){ drawLive(); renderMine(); renderMembers(); } }, 60000);
+
 boot().catch(e=>{ console.error(e); toast("起動できませんでした："+(e.message||e), 8000); });
 </script>
 </body>

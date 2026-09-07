@@ -9,6 +9,7 @@ rules_version = '2';
    - 区域をつくる・分ける・割り当てるのは管理者だけ。
    - 配布の記録（stat）と単位の生成（geom）は、参加者なら誰でも書ける。
    - 管理者を増やせるのは管理者だけ。自分で自分を管理者にはできない。
+   - 現在地（live）は、参加者なら読める。書けるのは自分の分だけ。
 */
 service cloud.firestore {
   match /databases/{db}/documents {
@@ -50,11 +51,17 @@ service cloud.firestore {
         allow delete: if signedIn() && (uid == request.auth.uid || isAdmin());
       }
 
+      /* 現在地。共有を入れている人の分だけ置かれ、やめると消える */
+      match /live/{uid} {
+        allow read:   if isMember();
+        allow write:  if isMember() && uid == request.auth.uid;
+      }
+
       /* 区域 */
       match /areas/{areaId} {
         function countersOnly() {
           return request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['total','done','skip','mode','grid','updated']);
+                 .hasOnly(['total','done','skip','mode','grid','updated','at']);
         }
         allow read:   if isMember();
         allow create: if isAdmin();
