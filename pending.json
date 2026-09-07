@@ -24,14 +24,6 @@
       "question": "差し替える問題文の一覧をもらえれば反映する。どの形式（テキスト / スプレッドシート）で渡すか決めてほしい。",
       "toolId": "t1",
       "created": "2026-08-26"
-    },
-    {
-      "id": "p4",
-      "task": "チラシマップの Firebase 側の設定を終える",
-      "situation": "専用プロジェクト flyer-790e5 の firebaseConfig を index.html に入れた。あとは Console 側の2つ（匿名ログインの有効化 / Firestore の作成とルールの貼り付け）が済めば、仲間と記録を共有できる。承認済みドメインの登録は匿名認証では不要。",
-      "question": "Console で (1) Authentication → Sign-in method → 匿名 を有効化 (2) Firestore を作成し chirashi-map/firestore.rules を貼る、の2つを済ませたか。済んだら実機で通しに試す。",
-      "toolId": "t11",
-      "created": "2026-09-06"
     }
   ]
 }
