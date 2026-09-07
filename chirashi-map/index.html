@@ -86,7 +86,10 @@ header.top{padding:26px 0 16px}
 .codein{letter-spacing:.34em;text-transform:uppercase;text-align:center;font-size:22px;font-weight:700}
 
 /* ---------- アプリ本体 ---------- */
-#app.on{display:flex;flex-direction:column;height:100dvh}
+/* アプリを開いている間は文書をスクロールさせない。
+   引っぱった拍子にページ全体やアドレスバーが動くのを止める */
+html.app-open, html.app-open body{height:100%;overflow:hidden;overscroll-behavior:none}
+#app.on{position:fixed;inset:0;display:flex;flex-direction:column}
 #app.on .stack{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
 .topbar{
   display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);
@@ -110,14 +113,35 @@ header.top{padding:26px 0 16px}
   border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom));
   box-shadow:0 -10px 26px -20px rgba(20,24,43,.9)
 }
-.drawhead{display:flex;align-items:baseline;gap:8px;margin-bottom:5px}
+.drawhead{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
 .drawhead b{font-size:13px;font-weight:700;flex:none}
 .drawhead span.h{font-size:11.5px;color:var(--slate);flex:1;min-width:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .drawhead span.n{font-size:11.5px;color:var(--slate);flex:none}
-.drawrow{display:flex;gap:6px}
-.drawrow+.drawrow{margin-top:6px}
-.drawrow .btn{flex:1;min-width:0;padding:8px 4px;font-size:13px;white-space:nowrap}
+.drawrow{display:flex;gap:8px;align-items:stretch}
+.drawrow+.drawrow{margin-top:8px}
+
+/* 描き方の切り替え。押すボタンではなく「いまどちらか」を示す部品として見せる */
+.seg{display:flex;flex:1;min-width:0;background:var(--field);border-radius:11px;padding:3px;gap:3px}
+.seg button{flex:1;min-width:0;border:0;background:transparent;border-radius:9px;
+  padding:8px 4px;font-size:13px;font-weight:500;color:var(--slate);cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--paper);color:var(--ink);font-weight:700;
+  box-shadow:0 1px 3px rgba(20,24,43,.2)}
+
+/* 道に沿わせるかどうかは入切のスイッチ。チェックで示す */
+.chk{display:inline-flex;align-items:center;gap:7px;flex:none;cursor:pointer;
+  border:1px solid var(--line);background:var(--paper);border-radius:11px;
+  padding:8px 11px;font-size:12.5px;color:var(--slate);white-space:nowrap}
+.chk i{width:18px;height:18px;border-radius:5px;flex:none;
+  border:1.5px solid var(--line);background:var(--paper);
+  display:grid;place-items:center;font-size:12px;line-height:1;color:transparent;font-style:normal}
+.chk.on{color:var(--ink);border-color:var(--done)}
+.chk.on i{background:var(--done);border-color:var(--done);color:#fff}
+
+/* 実行する操作はこの行だけ。決定だけを主役にする */
+.drawrow.act .btn{flex:1;min-width:0;padding:10px 4px;font-size:13.5px;white-space:nowrap}
+.drawrow.act .btn.primary{flex:1.6}
+.drawrow.act .btn.quiet{border-color:transparent;background:var(--field);color:var(--slate)}
 
 body.drawing .legend{display:none}
 body.drawing #btnBase,body.drawing #btnFit{display:none}
@@ -130,15 +154,17 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 }
 
 .panel{flex:0 0 auto;background:var(--paper);border-top:1px solid var(--line);
-  display:flex;flex-direction:column;max-height:48dvh}
-.panel.collapsed{max-height:none;height:auto!important}
+  display:flex;flex-direction:column;max-height:46%}
+.panel.collapsed{max-height:none}
 .panel.collapsed .tabbody{display:none}
+.panel.tall{max-height:78%}
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:none}
 .tabs button{flex:1;border:0;background:transparent;padding:11px 4px;font-size:13.5px;font-weight:500;
   color:var(--slate);cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--solid)}
 .tabbody{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
-.grabber{height:20px;display:grid;place-items:center;cursor:ns-resize;flex:none;touch-action:none}
+.grabber{height:22px;display:grid;place-items:center;cursor:pointer;flex:none;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .grabber i{display:block;width:44px;height:4px;border-radius:2px;background:var(--line);transition:background .15s}
 .grabber:active i{background:var(--slate)}
 
@@ -183,9 +209,10 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 .unitlabel{background:transparent;border:0;box-shadow:none;font-size:10px;color:#14182B;text-shadow:0 0 3px #fff,0 0 3px #fff}
 
 @media (min-width:860px){
-  #app.on{flex-direction:row;height:100dvh}
+  #app.on{flex-direction:row}
   #app.on .stack{min-width:0}
-  .panel{max-height:none;height:100dvh;width:380px;flex:none;border-top:0;border-left:1px solid var(--line)}
+  .panel{max-height:none;height:100%;width:380px;flex:none;border-top:0;border-left:1px solid var(--line)}
+  .panel.collapsed .tabbody{display:block}
   .grabber{display:none}
 }
 </style>
@@ -255,14 +282,16 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
           <span class="n mono" id="drawCount"></span>
         </div>
         <div class="drawrow">
-          <button class="btn" id="drawModeTap">点を置く</button>
-          <button class="btn" id="drawModeTrace">なぞる</button>
-          <button class="btn" id="drawSnap">道に沿う</button>
+          <div class="seg">
+            <button id="drawModeTap" class="on">点を置く</button>
+            <button id="drawModeTrace">なぞる</button>
+          </div>
+          <button class="chk on" id="drawSnap"><i>✓</i>道に沿わせる</button>
         </div>
-        <div class="drawrow">
-          <button class="btn" id="drawUndo">1つ戻す</button>
-          <button class="btn" id="drawCancel">やめる</button>
-          <button class="btn primary" id="drawDone">決定</button>
+        <div class="drawrow act">
+          <button class="btn quiet" id="drawUndo">1つ戻す</button>
+          <button class="btn quiet" id="drawCancel">やめる</button>
+          <button class="btn primary" id="drawDone">この形で決定</button>
         </div>
       </div>
     </div>
@@ -1179,7 +1208,7 @@ const Draw = {
     $("#drawModeTap").classList.toggle("on", this.kind==="tap");
     $("#drawModeTrace").classList.toggle("on", this.kind==="trace");
     $("#drawSnap").classList.toggle("on", this.snap);
-    $("#drawSnap").textContent = this.snap ? "道に沿う：入" : "道に沿う：切";
+    $("#drawUndo").disabled = this.pts.length===0;
   },
   setKind(k){
     this.kind=k;
@@ -1221,6 +1250,7 @@ const Draw = {
     if(this.kind==="tap")
       this.pts.forEach((p,i)=> L.circleMarker(p,{radius:6,color:"#fff",weight:2,fillColor:"#2F5BFF",fillOpacity:1}).addTo(gDraw));
     $("#drawDone").disabled = this.pts.length<3;
+    $("#drawUndo").disabled = this.pts.length===0;
     $("#drawCount").textContent = this.pts.length ? this.pts.length+"点" : "";
   },
   undo(){ this.pts.pop(); this.paint(); },
@@ -1796,6 +1826,7 @@ function setTab(t){
 }
 function showScreen(id){
   $$(".screen").forEach(s=>s.classList.toggle("on", s.id===id));
+  document.documentElement.classList.toggle("app-open", id==="app");
   if(id==="app") setTimeout(()=>map.invalidateSize(), 60);
 }
 
@@ -1915,30 +1946,23 @@ async function boot(){
   $$(".tabs button").forEach(b=> b.onclick=()=>setTab(b.dataset.tab));
 
   /* パネルの高さを引っぱって変える */
+  /* パネルの高さは「押すたびに ふつう → 大きく → たたむ」の3段階。
+     指で引っぱる方式はやめた。端末によってはページごと動いてしまうため。 */
   const grab=$("#grabber"), panel=$("#panel");
-  const togglePanel=()=>{
-    panel.classList.toggle("collapsed");
-    if(!panel.classList.contains("collapsed") && !panel.style.height)
-      panel.style.maxHeight=""; /* 既定の高さに戻す */
+  const SNAP=["", "tall", "collapsed"];
+  let snap=0;
+  const applySnap=()=>{
+    panel.classList.remove("tall","collapsed");
+    if(SNAP[snap]) panel.classList.add(SNAP[snap]);
+    grab.setAttribute("aria-label", ["ふつう","大きく","たたむ"][snap]);
     setTimeout(()=>map.invalidateSize(), 30);
   };
-  grab.addEventListener("pointerdown", e=>{
-    grab.setPointerCapture(e.pointerId);
-    const y0=e.clientY, h0=panel.getBoundingClientRect().height;
-    let moved=false;
-    const mv=ev=>{
-      if(Math.abs(ev.clientY-y0) < 6 && !moved) return;
-      moved=true;
-      panel.classList.remove("collapsed");
-      const h=clamp(h0+(y0-ev.clientY), 56, window.innerHeight*0.85);
-      panel.style.maxHeight=h+"px"; panel.style.height=h+"px"; map.invalidateSize();
-    };
-    const up=()=>{
-      grab.removeEventListener("pointermove",mv); grab.removeEventListener("pointerup",up);
-      if(!moved) togglePanel();          /* 引っぱらずに押しただけならたたむ／開く */
-    };
-    grab.addEventListener("pointermove",mv); grab.addEventListener("pointerup",up);
-  });
+  grab.addEventListener("click", ()=>{ snap=(snap+1)%SNAP.length; applySnap(); });
+  applySnap();
+  /* たたんでいるときにタブを押したら、そのまま開く */
+  $$(".tabs button").forEach(b=> b.addEventListener("click", ()=>{
+    if(panel.classList.contains("collapsed")){ snap=0; applySnap(); }
+  }));
 
   /* データの保存先 */
   await Store.init();
