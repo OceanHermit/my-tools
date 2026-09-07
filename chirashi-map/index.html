@@ -156,16 +156,18 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
   display:flex;flex-direction:column;max-height:46%}
 .panel.collapsed{max-height:none}
 .panel.collapsed .tabbody{display:none}
-.panel.tall{max-height:78%}
+.panel.collapsed .tabs{display:none}
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:none}
 .tabs button{flex:1;border:0;background:transparent;padding:11px 4px;font-size:13.5px;font-weight:500;
   color:var(--slate);cursor:pointer;border-bottom:2px solid transparent}
 .tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--solid)}
 .tabbody{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 14px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
-.grabber{height:22px;display:grid;place-items:center;cursor:pointer;flex:none;
+.grabber{width:100%;height:32px;display:flex;align-items:center;justify-content:center;gap:7px;
+  border:0;border-bottom:1px solid var(--line);background:var(--paper);
+  font:inherit;font-size:12.5px;color:var(--slate);cursor:pointer;flex:none;
   touch-action:manipulation;user-select:none;-webkit-user-select:none}
-.grabber i{display:block;width:44px;height:4px;border-radius:2px;background:var(--line);transition:background .15s}
-.grabber:active i{background:var(--slate)}
+.grabber:active{background:var(--field)}
+.grabber i{font-style:normal;font-size:10px}
 
 /* 区域・仲間の行 */
 .item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--paper)}
@@ -306,7 +308,7 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
       <div class="maptools">
         <button class="iconbtn" id="btnLocate" title="現在地">◎</button>
         <button class="iconbtn" id="btnBase" title="地図の種類">▤</button>
-        <button class="iconbtn" id="btnFit" title="区域全体を表示">⤢</button>
+        <button class="iconbtn" id="btnFit" title="区域全体が入るように地図を合わせる">⤢</button>
       </div>
       <div class="legend" id="legend"></div>
       <div class="livechip hide" id="livechip">
@@ -335,7 +337,7 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
   </div>
 
   <div class="panel" id="panel">
-    <div class="grabber" id="grabber"><i></i></div>
+    <button class="grabber" id="grabber"><span id="grabTxt">地図を広く</span><i id="grabIco">▼</i></button>
     <div class="tabs hide" id="tabs">
       <button data-tab="areas" class="on">区域</button>
       <button data-tab="mem">仲間</button>
@@ -981,6 +983,10 @@ const Store = {
     }
     return pj;
   },
+  async removeMember(code, uid){
+    if(this.remote) await this.base(code).collection("members").doc(uid).delete();
+    else { const d=Local.read(code); delete d.members[uid]; Local.write(code,d); }
+  },
   async setMember(code, uid, patch){
     if(this.remote) await this.base(code).collection("members").doc(uid).set(patch,{merge:true});
     else { const d=Local.read(code); d.members[uid]=Object.assign({}, d.members[uid]||{}, patch); Local.write(code,d); }
@@ -1156,7 +1162,14 @@ const childrenOf = pid => areaList().filter(a=>a.parent===pid).sort((a,b)=>(a.na
 const parents   = () => areaList().filter(a=>!a.parent).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
 const ringOf = a => { try{ return JSON.parse(a.ringJson||"[]"); }catch(e){ return []; } };
 const memberColor = uid => (S.members[uid] && S.members[uid].color) || "#98A1B8";
-const memberName  = uid => (S.members[uid] && S.members[uid].name) || "未割り当て";
+/* 同じ名前の人が複数いると、どの行が誰か分からなくなるので後ろに目印を足す */
+function memberName(uid){
+  const m=S.members[uid];
+  if(!m) return "未割り当て";
+  const nm=m.name||"名なし";
+  const dup=Object.keys(S.members).filter(u=>((S.members[u].name||"名なし")===nm)).length>1;
+  return dup ? nm+" #"+String(uid).slice(0,4) : nm;
+}
 
 /* =========================================================================
    8. 地図
@@ -1555,7 +1568,7 @@ function renderMates(){
     }
     h += '<button class="mate" data-mate="'+esc(uid)+'"'+((lv&&typeof lv.lat==="number")||areaList().some(a=>a.uid===uid)?"":" disabled")+'>'
        + '<div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
-       + '<b>'+esc(m.name||"名なし")+(uid===S.uid?"（あなた）":"")+'</b>'
+       + '<b>'+esc(memberName(uid))+(uid===S.uid?"（あなた）":"")+'</b>'
        + chips.join("")
        + '<span class="mono">'+(st.pct!==null? st.pct+"%" : "—")+'</span></div>'
        + (st.pct!==null? '<div class="bar"><i style="width:'+st.pct+'%"></i></div>' : '')
@@ -1650,7 +1663,7 @@ function renderMembers(){
     const mine=areaList().filter(a=>a.uid===uid);
     const st=statsOf(uid), lv=S.live[uid], pct=st.pct, t=st.t, d=st.d;
     h += '<div class="item"><div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
-       + '<b>'+esc(m.name||"名なし")+'</b>'
+       + '<b>'+esc(memberName(uid))+'</b>'
        + (m.admin?'<span class="pill">管理者</span>':'')
        + (uid===S.uid?'<span class="pill">あなた</span>':'')+'</div>'
        + '<p class="muted">担当 '+mine.length+' 区画'+(pct!==null?'／'+d+' of '+t+'（'+pct+'%）':'')
@@ -1658,8 +1671,11 @@ function renderMembers(){
           : (st.at? '　記録 '+esc(relTime(st.at)) : ''))+'</p>'
        + (pct!==null?'<div class="bar"><i style="width:'+pct+'%"></i></div>':'')
        + (isAdmin() && uid!==S.project.ownerUid
-          ? '<div class="row" style="margin-top:8px"><button class="btn sm" data-adm="'+esc(uid)+'" data-to="'+(m.admin?"0":"1")+'">'
-            + (m.admin?"管理者を外す":"管理者にする")+'</button></div>' : '')
+          ? '<div class="row wrap" style="margin-top:8px;gap:6px">'
+            + '<button class="btn sm" data-adm="'+esc(uid)+'" data-to="'+(m.admin?"0":"1")+'">'
+            + (m.admin?"管理者を外す":"管理者にする")+'</button>'
+            + (uid!==S.uid ? '<button class="btn sm danger" data-rmv="'+esc(uid)+'">この人を消す</button>' : '')
+            + '</div>' : '')
        + '</div>';
   }
   h += '<div class="card" style="margin-top:16px"><h2>合言葉コード</h2>'
@@ -1670,6 +1686,16 @@ function renderMembers(){
                  + '端末をなくしたときのために、もう1人を管理者にしておくと安心です。</p>':'')
      + '</div>';
   host.innerHTML=h;
+  $$("[data-rmv]",host).forEach(b=> b.onclick=async()=>{
+    const uid=b.dataset.rmv, mine=areaList().filter(a=>a.uid===uid);
+    if(!(await modal('<h2>「'+esc(memberName(uid))+'」を一覧から消す</h2>'
+      + '<p class="muted">'+(mine.length? '担当していた '+mine.length+' 区画は未割り当てに戻ります。配った記録は残ります。'
+                                        : '配った記録は残ります。')
+      + '<br>同じ端末からまた参加すると、また出てきます。</p>', {ok:"消す"}))) return;
+    for(const a of mine) await Store.saveArea(S.code, Object.assign({}, a, {ring:ringOf(a), uid:""}));
+    await Store.removeMember(S.code, uid);
+    toast("一覧から消しました");
+  });
   $$("[data-adm]",host).forEach(b=> b.onclick=async()=>{
     const uid=b.dataset.adm, to=b.dataset.to==="1";
     await Store.setMember(S.code, uid, {admin:to});
@@ -1764,6 +1790,38 @@ function tapUnit(id){
 }
 
 /* --- 現在地・自動記録 --- */
+/* 位置情報が断られているときは、ただ失敗を出さずに直し方を出す。
+   仲間への共有と、端末側の許可は別物なので、そこも書く */
+async function geoState(){
+  try{
+    if(navigator.permissions && navigator.permissions.query)
+      return (await navigator.permissions.query({name:"geolocation"})).state;
+  }catch(e){}
+  return "unknown";
+}
+function geoHelp(what){
+  return modal('<h2>位置情報が使えません</h2>'
+    + '<p class="muted"><b>'+esc(what)+'</b>には、この端末で位置情報を許可する必要があります。'
+    + 'アプリの中の「現在地を知らせる」とは別の、端末側の設定です。</p>'
+    + '<ul class="muted" style="margin:10px 0 0;padding-left:18px">'
+    + '<li>LINE などのアプリの中で開いていると、位置情報が使えないことがあります。'
+    + '画面右下の <b>…</b> から <b>Safari で開く</b> を試してください（これで通ることが多いです）</li>'
+    + '<li>iPhone：設定 → プライバシーとセキュリティ → 位置情報サービス → 使っているブラウザ を'
+    + '「このAppの使用中のみ許可」に</li>'
+    + '<li>設定を変えたら、このページを開き直してください</li></ul>',
+    {noCancel:true, ok:"わかりました"});
+}
+async function ensureGeo(what){
+  if(!navigator.geolocation){ await geoHelp(what); return false; }
+  if(await geoState()==="denied"){ await geoHelp(what); return false; }
+  return true;
+}
+/* 断られたときだけ案内を出し、それ以外は短く知らせる */
+async function onGeoError(e, what){
+  if(e && e.code===1) await geoHelp(what);
+  else toast("現在地をとれませんでした（"+((e&&e.message)||"原因不明")+"）", 4500);
+}
+
 let watchId=null;
 function showMe(p, acc){
   const ll=[p[0],p[1]];
@@ -1772,23 +1830,23 @@ function showMe(p, acc){
     meCircle=L.circle(ll,{radius:acc||20,color:"#2F5BFF",weight:1,opacity:.35,fillOpacity:.06}).addTo(map);
   }else{ meMarker.setLatLng(ll); meCircle.setLatLng(ll).setRadius(acc||20); }
 }
-function locateOnce(){
-  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+async function locateOnce(){
+  if(!(await ensureGeo("現在地を出すこと"))) return;
   navigator.geolocation.getCurrentPosition(
     p=>{ S.pos=[p.coords.latitude,p.coords.longitude]; showMe(S.pos,p.coords.accuracy); map.setView(S.pos, Math.max(map.getZoom(),17)); },
-    e=>toast("現在地をとれませんでした（"+e.message+"）",4000),
+    e=>onGeoError(e, "現在地を出すこと"),
     {enableHighAccuracy:true, timeout:12000, maximumAge:5000});
 }
-function toggleWalk(){
+async function toggleWalk(){
   if(S.autoWalk){ stopWalk(); return; }
-  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+  if(!(await ensureGeo("歩いた道の自動記録"))) return;
   S.autoWalk=true;
   watchId=navigator.geolocation.watchPosition(p=>{
     S.pos=[p.coords.latitude,p.coords.longitude]; S.posAcc=p.coords.accuracy;
     showMe(S.pos,p.coords.accuracy);
     if(p.coords.accuracy>40) return;
     autoMark(S.pos, Math.max(14, Math.min(25, p.coords.accuracy)));
-  }, e=>{ toast("現在地が止まりました（"+e.message+"）",4000); stopWalk(); },
+  }, e=>{ stopWalk(); onGeoError(e, "歩いた道の自動記録"); },
      {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
   toast("歩いた道を自動で済みにします。画面を消しても続くとは限りません。", 4200);
   renderMine();
@@ -1843,7 +1901,7 @@ function minsSince(t){ return Math.floor((Date.now()-t)/60000); }
 
 async function toggleShare(){
   if(S.share){ stopShare(); toast("現在地の共有をやめました"); return; }
-  if(!navigator.geolocation){ toast("この端末では現在地が使えません"); return; }
+  if(!(await ensureGeo("仲間に現在地を知らせること"))) return;
   const ok = await modal('<h2>現在地を仲間に知らせる</h2>'
     + '<p class="muted">入れている間、あなたのいる場所が、この地区の仲間の地図に出ます。'
     + '進んでいない人を手伝いに行ったり、様子がおかしいときに向かうためのものです。</p>'
@@ -1869,7 +1927,7 @@ function startShare(){
     S.shareLast=pos; S.shareSent=Date.now();
     Store.setLive(S.code, {lat:+pos[0].toFixed(5), lng:+pos[1].toFixed(5),
       acc:Math.round(p.coords.accuracy||0), at:Date.now(), mv:S.shareMoved, name:meMember().name||""});
-  }, e=>{ toast("現在地をとれませんでした（"+e.message+"）",4000); stopShare(); },
+  }, e=>{ stopShare(); onGeoError(e, "仲間に現在地を知らせること"); },
      {enableHighAccuracy:true, maximumAge:5000, timeout:25000});
   renderMine();
 }
@@ -2200,23 +2258,16 @@ async function boot(){
   $$(".tabs button").forEach(b=> b.onclick=()=>setTab(b.dataset.tab));
 
   /* パネルの高さを引っぱって変える */
-  /* パネルの高さは「押すたびに ふつう → 大きく → たたむ」の3段階。
-     指で引っぱる方式はやめた。端末によってはページごと動いてしまうため。 */
+  /* パネルは開くか、たたむかの2つだけ。いま押すと何が起きるかを文字で出す */
   const grab=$("#grabber"), panel=$("#panel");
-  const SNAP=["", "tall", "collapsed"];
-  let snap=0;
-  const applySnap=()=>{
-    panel.classList.remove("tall","collapsed");
-    if(SNAP[snap]) panel.classList.add(SNAP[snap]);
-    grab.setAttribute("aria-label", ["ふつう","大きく","たたむ"][snap]);
+  window.setPanelOpen = open=>{
+    panel.classList.toggle("collapsed", !open);
+    $("#grabTxt").textContent = open ? "地図を広く" : "一覧を出す";
+    $("#grabIco").textContent = open ? "▼" : "▲";
     setTimeout(()=>map.invalidateSize(), 30);
   };
-  grab.addEventListener("click", ()=>{ snap=(snap+1)%SNAP.length; applySnap(); });
-  applySnap();
-  /* たたんでいるときにタブを押したら、そのまま開く */
-  $$(".tabs button").forEach(b=> b.addEventListener("click", ()=>{
-    if(panel.classList.contains("collapsed")){ snap=0; applySnap(); }
-  }));
+  grab.addEventListener("click", ()=> setPanelOpen(panel.classList.contains("collapsed")));
+  setPanelOpen(true);
 
   /* データの保存先 */
   await Store.init();
