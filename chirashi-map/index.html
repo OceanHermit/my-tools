@@ -268,16 +268,17 @@ header.top{padding:26px 0 16px}
    0. 設定
    ========================================================================= */
 
-/* Firebase の設定。まだ用意していない間は下の PLACEHOLDER のままでよい。
-   その場合アプリは「この端末だけ」モードで動く（データは localStorage）。
-   本番では Firebase Console でつくったプロジェクトの値に差し替える。      */
+/* チラシマップ専用の Firebase プロジェクト（かるた・かさなりとは別）。
+   apiKey は Web 版 Firebase では公開される前提の値で、秘密情報ではない。
+   実質的な防御は firestore.rules 側で行う。
+   ここを "PLACEHOLDER" に戻すと、アプリは「この端末だけ」モードで動く。 */
 const firebaseConfig = {
-  apiKey:            "PLACEHOLDER",
-  authDomain:        "PLACEHOLDER.firebaseapp.com",
-  projectId:         "PLACEHOLDER",
-  storageBucket:     "PLACEHOLDER.firebasestorage.app",
-  messagingSenderId: "PLACEHOLDER",
-  appId:             "PLACEHOLDER"
+  apiKey:            "AIzaSyBTE8EFnN7UiBUGnNLMemu_YxCqH9mTmi4",
+  authDomain:        "flyer-790e5.firebaseapp.com",
+  projectId:         "flyer-790e5",
+  storageBucket:     "flyer-790e5.firebasestorage.app",
+  messagingSenderId: "276711881048",
+  appId:             "1:276711881048:web:93c47845b6de43b721cd2d"
 };
 const APP_ID   = "chirashi-map";
 const LS_PREFIX= "chirashi-map:";

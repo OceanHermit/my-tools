@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-06",
+  "updated": "2026-09-07",
   "pending": [
     {
       "id": "p1",
@@ -27,9 +27,9 @@
     },
     {
       "id": "p4",
-      "task": "チラシマップ用の Firebase プロジェクトを用意する",
-      "situation": "アプリは完成していて、区域づくり・分割・記録・オフライン保存まで動く。ただし firebaseConfig が PLACEHOLDER のままなので、いまは『この端末だけ』モードで動いている。仲間と記録を共有するには Firebase 側の用意が要る。",
-      "question": "Firebase Console で新規プロジェクトを作り、(1) 匿名ログインを有効化 (2) 承認済みドメインに oceanhermit.github.io を追加 (3) Firestore を作成 (4) chirashi-map/firestore.rules を貼る、まで済ませて firebaseConfig を渡してほしい。渡してもらえれば index.html に入れる。",
+      "task": "チラシマップの Firebase 側の設定を終える",
+      "situation": "専用プロジェクト flyer-790e5 の firebaseConfig を index.html に入れた。あとは Console 側の2つ（匿名ログインの有効化 / Firestore の作成とルールの貼り付け）が済めば、仲間と記録を共有できる。承認済みドメインの登録は匿名認証では不要。",
+      "question": "Console で (1) Authentication → Sign-in method → 匿名 を有効化 (2) Firestore を作成し chirashi-map/firestore.rules を貼る、の2つを済ませたか。済んだら実機で通しに試す。",
       "toolId": "t11",
       "created": "2026-09-06"
     }

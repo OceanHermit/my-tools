@@ -20,7 +20,7 @@
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
-| チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase。**Firebase 未設定のうちは端末内保存で動く** |
+| チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
 | ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
 ## ディレクトリ構成
@@ -256,19 +256,21 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 - 単位ID 900件ごとに `stat` の文書を分ける（1文書 1MB の上限対策）
 - `enablePersistence` を入れてあるので**圏外でも記録でき、電波が戻ると自動で送られる**
 
-### Firebase の設定（これをやるまでは端末内保存で動く）
+### Firebase の設定
 
-`chirashi-map/index.html` の先頭にある `firebaseConfig` が `PLACEHOLDER` のままの間、
-アプリは「この端末だけ」モードで動く。画面上部にその旨の帯が出る。記録は localStorage に残るが
-**仲間とは共有されない**。共有するには：
+専用プロジェクト **`flyer-790e5`** を使う（かるた・かさなりとは別）。手順は：
 
-1. Firebase Console で**新しいプロジェクト**を作る（かるた・かさなりとは別にする）
+1. Firebase Console で新しいプロジェクトを作る
 2. Authentication → Sign-in method → **匿名**を有効化
-3. Authentication → Settings → 承認済みドメインに **`oceanhermit.github.io`** を追加
-4. Firestore を作成し、`chirashi-map/firestore.rules` の中身をルールに貼る
-5. プロジェクトの設定 → ウェブアプリの `firebaseConfig` を `index.html` にコピーする
+3. Firestore を作成し、`chirashi-map/firestore.rules` の中身をルールに貼る
+4. プロジェクトの設定 → ウェブアプリの `firebaseConfig` を `index.html` にコピーする
 
-匿名認証は承認済みドメインの制約を受けないが、後から Google ログインを足すなら 3 が要る。
+**承認済みドメインの登録は要らない。** 匿名認証はその制約を受けない（かるたと同じ）。
+後から Google ログインを足すときだけ、Authentication → Settings → 承認済みドメインに
+`oceanhermit.github.io` を入れる。
+
+`firebaseConfig` を `"PLACEHOLDER"` に戻すと「この端末だけ」モードで動く。
+記録は localStorage に残るが仲間とは共有されず、画面上部にその旨の帯が出る。
 
 ### 権限の考え方
 
