@@ -20,6 +20,7 @@
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
+| NEKO-ZUKAI | https://oceanhermit.github.io/my-tools/neko-zukai/ | おこづかい帳。段階1はこの端末の localStorage のみ（段階2で Firebase 同期の予定） |
 | チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
 | ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
@@ -36,6 +37,8 @@ my-tools/
 ├── kizuna-karuta/
 │   └── index.html
 ├── kasanari/
+│   └── index.html
+├── neko-zukai/
 │   └── index.html
 ├── chirashi-map/
 │   ├── index.html
@@ -353,3 +356,25 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 - **Overpass** は overpass-api.de → overpass.kumi.systems の順に試す。区域が 12km² を超えるときは
   単位を作らせない（先に分けてもらう）
 - 地図タイルは既定で**地理院タイル（淡色）**。標準地図・航空写真・OSM に切り替えられる
+
+
+---
+
+## NEKO-ZUKAI
+
+毎月自由に使えるお金を決めて、毎日使った分を記録するおこづかい帳。茶トラの家ネコが「〜にゃ」で話す。
+
+### 計算の決まり
+
+- 期間は **加算日〜次の加算日の前日**。加算日は設定で変えられる（既定 25日。29〜31日は短い月なら月末）
+- 加算日に毎月の額が足される。**余りは全額を次の期間へ繰り越す。マイナスも次の期間から差し引く**
+- 「今日つかえるお金」＝ 今朝の時点の今期の残り ÷ 次の加算日までの日数（今日を含む）− 今日使った額。
+  目安は朝の時点で固定なので、使っても今日の目安そのものは動かない。使いすぎた分は翌日以降の目安に響く
+- 設定の金額・加算日を変えても過去の期間は書き換えない（`configs` に変更日ごとの履歴を持つ）
+
+### 進め方
+
+1. 画面と計算（この端末だけに保存） ← いまここ
+2. 専用の Firebase プロジェクトで、Googleログインして複数端末に同期
+3. 連続記録とカレンダーのスタンプ
+4. 締め日の振り返りと、貯金箱が育つ演出
