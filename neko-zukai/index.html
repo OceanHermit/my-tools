@@ -136,6 +136,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .field:focus{outline:2px solid var(--fur);outline-offset:-1px}
 .date-chip{flex:0 0 auto;position:relative;display:flex;align-items:center;gap:4px;padding:10px 12px;border-radius:12px;background:var(--cream);border:1.5px solid var(--line);font-size:14px;white-space:nowrap}
 .date-chip input{position:absolute;inset:0;opacity:0;width:100%}
+.favs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.fav{display:flex;justify-content:space-between;gap:6px;border:1.5px solid var(--line);background:var(--paper);border-radius:12px;padding:8px 10px;font-size:13px;text-align:left}
+.fav span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft)}
+.fav.on{border-color:var(--fur);background:var(--cream)}
 .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
 .key{border:0;border-radius:14px;background:var(--paper);font-size:24px;font-weight:700;padding:12px 0;box-shadow:0 2px 0 var(--line)}
 .key:active{transform:translateY(2px);box-shadow:none;background:var(--cream)}
@@ -424,10 +428,23 @@ function addEntry(e){
   store.save(data);
 }
 
+/* よく入れる「金額＋メモ」。2回以上入れたものを、回数 → 新しさの順に4つまで */
+function frequent(){
+  const m = new Map();
+  for(const e of data.entries){
+    if(!e.amount) continue;
+    const k = e.amount + '\u0000' + e.memo;
+    const x = m.get(k) || { amount: e.amount, memo: e.memo, n: 0, at: 0 };
+    x.n++; x.at = Math.max(x.at, e.at); m.set(k, x);
+  }
+  return [...m.values()].filter(x => x.n >= 2).sort((a,b) => b.n - a.n || b.at - a.at).slice(0, 4);
+}
+
 /* 入力シート（e を渡すと編集） */
 function openEntry(edit){
   let val = edit ? String(edit.amount) : '';
   let date = edit ? edit.date : todayStr();
+  const favs = frequent();
   const { scrim, sheet, close } = openSheet(`
     <h3>${edit ? '記録をなおす' : '使ったお金'}</h3>
     <div class="disp num"><small>¥</small><span id="val"></span></div>
@@ -435,6 +452,8 @@ function openEntry(edit){
       <label class="date-chip"><span id="date-txt"></span> ▾<input type="date" id="date" max="${todayStr()}" min="${data.start}"></label>
       <input class="field" id="memo" placeholder="メモ（例: ランチ）" maxlength="40" value="${edit ? esc(edit.memo) : ''}">
     </div>
+    ${!edit && favs.length ? `<div class="favs">${favs.map((f,i) =>
+      `<button class="fav" data-i="${i}"><span>${esc(f.memo || 'メモなし')}</span><b class="num">${yen(f.amount)}</b></button>`).join('')}</div>` : ''}
     <div class="keys">
       ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="key" data-k="${n}">${n}</button>`).join('')}
       <button class="key fn" data-k="00">00</button>
@@ -457,6 +476,12 @@ function openEntry(edit){
     const x = k.dataset.k;
     if(x === 'bs') val = val.slice(0, -1);
     else if(val.length < 8) val = (val + x).replace(/^0+/, '');
+    paint();
+  });
+  sheet.querySelectorAll('.fav').forEach(b => b.onclick = () => {
+    const f = favs[b.dataset.i];
+    val = String(f.amount); sheet.querySelector('#memo').value = f.memo;
+    sheet.querySelectorAll('.fav').forEach(x => x.classList.toggle('on', x === b));
     paint();
   });
   $save.onclick = () => {
