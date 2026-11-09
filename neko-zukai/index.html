@@ -111,6 +111,36 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .ent .yen{font-weight:700}
 .empty{color:var(--soft);font-size:13.5px;text-align:center;padding:8px 0}
 
+/* ---- streak ---- */
+.streak{display:flex;align-items:center;gap:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--r);padding:10px 16px;margin-top:16px}
+.streak > svg{width:36px;height:36px;flex:0 0 auto}
+.streak-t{font-size:14px}
+.streak-t b{font-size:28px;font-weight:900;margin-right:2px}
+.streak-t small{display:block;color:var(--soft);font-size:12px;line-height:1.3}
+
+/* ---- calendar ---- */
+.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.cal-h h2{margin:0;color:var(--ink)}
+.cal-nav,.cal-nav-sp{width:36px;height:32px}
+.cal-nav{border:0;background:transparent;font-size:22px;color:var(--soft);border-radius:10px;line-height:1}
+.cal-nav:active{background:var(--cream)}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.cal-wd{font-size:11px;color:var(--soft)}
+.cal-d{
+  aspect-ratio:1;border:0;background:transparent;border-radius:10px;position:relative;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--soft);padding:0;
+}
+button.cal-d:active{background:var(--cream)}
+.cal-d.off{opacity:.4}
+.cal-d.today{outline:2px solid var(--accent);outline-offset:-2px}
+.cal-d svg{width:76%;height:76%}
+.cal-d .n{position:absolute;top:1px;left:4px;font-size:9px;line-height:1}
+.cal-d.stamped svg{animation:stamp .35s ease}
+@keyframes stamp{0%{transform:scale(1.8);opacity:0}70%{transform:scale(.9);opacity:1}100%{transform:scale(1)}}
+.cal-legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;font-size:11.5px;color:var(--soft);margin-top:8px}
+.cal-legend span{display:flex;align-items:center;gap:3px}
+.cal-legend svg{width:16px;height:16px}
+
 /* ---- sheet (bottom modal) ---- */
 .scrim{position:fixed;inset:0;background:rgba(90,62,43,.35);z-index:10;animation:fade .2s}
 @keyframes fade{from{opacity:0}}
@@ -426,7 +456,47 @@ function compute(){
   return {
     today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft,
     next: ymd(next), recordedToday: data.entries.some(e => e.date === today),
+    stamps: stampsOf([...periods, cur], spentBy, today),
+    ...streakOf(spentBy, today),
   };
+}
+
+/* カレンダーのスタンプ。記録のある日ごとに、その日の目安を守れたかを出す
+   good = 目安内 / over = 使いすぎ / zero = 使わなかった */
+function stampsOf(periods, spentBy, today){
+  const out = {};
+  for(const p of periods){
+    let left = p.carry + p.amount;          // その日の朝の残り
+    const last = parse(p.end);
+    for(let d = parse(p.start); d <= last; d = addDays(d, 1)){
+      const s = ymd(d);
+      if(s > today) break;
+      const spent = spentBy[s];
+      if(spent !== undefined){
+        const days = Math.round((last - d) / 864e5) + 1;
+        const base = left > 0 ? Math.floor(left / days) : 0;
+        out[s] = spent === 0 ? 'zero' : spent <= base ? 'good' : 'over';
+      }
+      left -= spent || 0;
+    }
+  }
+  return out;
+}
+
+/* 連続記録。あとから入れた日もつながる。今日まだ記録していなくても、昨日までつながっていれば途切れない */
+function streakOf(spentBy, today){
+  const has = s => spentBy[s] !== undefined;
+  let d = parse(today);
+  if(!has(today)) d = addDays(d, -1);
+  let streak = 0;
+  while(has(ymd(d))){ streak++; d = addDays(d, -1); }
+
+  let best = 0, run = 0, prev = null;
+  for(const s of Object.keys(spentBy).sort()){
+    run = prev && ymd(addDays(parse(prev), 1)) === s ? run + 1 : 1;
+    best = Math.max(best, run); prev = s;
+  }
+  return { streak, best };
 }
 
 /* =========================================================
@@ -504,6 +574,16 @@ function render(){
       ${c.recordedToday ? '' : '<button class="btn ghost" id="zero-day">今日は使わなかった</button>'}
     </div>
 
+    <section class="streak">
+      ${PAW('#E08A3C')}
+      <div class="streak-t">
+        ${c.streak ? `<b class="num">${c.streak}</b>日れんぞく` : '<b class="num">0</b>日'}
+        <small>${c.recordedToday ? `いちばん長い記録 ${c.best}日` : c.streak ? '今日記録すると、もう1日のびるにゃ' : '今日から始めるにゃ'}</small>
+      </div>
+    </section>
+
+    ${calendarHTML(c)}
+
     <section class="card">
       <h2>今期（${md(c.cur.start)} 〜 ${md(c.cur.end)}）</h2>
       <div class="stats">
@@ -538,6 +618,48 @@ function render(){
   const z = $app.querySelector('#zero-day');
   if(z) z.onclick = () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); };
   $app.querySelectorAll('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
+  $app.querySelectorAll('.cal-d[data-d]').forEach(b => b.onclick = () => openEntry(null, b.dataset.d));
+  $app.querySelectorAll('.cal-nav').forEach(b => b.onclick = () => { calMonth = b.dataset.m; render(); });
+}
+
+/* =========================================================
+   カレンダー（肉球スタンプ）
+   ========================================================= */
+const PAW = c => `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="26" rx="9" ry="8" fill="${c}"/><circle cx="9" cy="16" r="4" fill="${c}"/><circle cx="16" cy="9" r="4" fill="${c}"/><circle cx="24" cy="9" r="4" fill="${c}"/><circle cx="31" cy="16" r="4" fill="${c}"/></svg>`;
+const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E' };
+const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった' };
+let calMonth = null;   // 'YYYY-MM'。null なら今月
+let seenStamps = null; // 前回描いたスタンプ。新しく押された日だけ動かす
+
+function calendarHTML(c){
+  const ym = s => s.slice(0, 7);
+  const first = ym(data.start), last = ym(c.today);
+  let m = calMonth || last;
+  if(m < first) m = first;
+  if(m > last) m = last;
+  const [y, mo] = m.split('-').map(Number);
+  const shift = k => { const d = new Date(y, mo - 1 + k, 1); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+
+  let cells = WD.map(w => `<div class="cal-wd">${w}</div>`).join('');
+  for(let i = 0; i < new Date(y, mo - 1, 1).getDay(); i++) cells += '<div></div>';
+  for(let d = 1; d <= dim(y, mo - 1); d++){
+    const s = `${m}-${pad(d)}`;
+    const st = c.stamps[s];
+    const fresh = st && seenStamps && seenStamps[s] !== st;
+    const can = s >= data.start && s <= c.today;
+    const label = `${mo}月${d}日${st ? ' ' + STAMP_LABEL[st] : ''}`;
+    cells += `<${can ? 'button' : 'div'} class="cal-d ${s === c.today ? 'today' : ''} ${can ? '' : 'off'} ${fresh ? 'stamped' : ''}" ${can ? `data-d="${s}" aria-label="${label}"` : ''}>
+      ${st ? `<span class="n">${d}</span>${PAW(STAMP[st])}` : d}</${can ? 'button' : 'div'}>`;
+  }
+  const nav = (k, txt, show) => show
+    ? `<button class="cal-nav" data-m="${shift(k)}" aria-label="${k < 0 ? '前の月' : '次の月'}">${txt}</button>`
+    : '<span class="cal-nav-sp"></span>';
+  seenStamps = { ...c.stamps };
+  return `<section class="card cal">
+    <div class="cal-h">${nav(-1, '‹', m > first)}<h2>${y}年 ${mo}月</h2>${nav(1, '›', m < last)}</div>
+    <div class="cal-g">${cells}</div>
+    <div class="cal-legend">${Object.keys(STAMP).map(k => `<span>${PAW(STAMP[k])}${STAMP_LABEL[k]}</span>`).join('')}</div>
+  </section>`;
 }
 
 function makeCat(face){
@@ -581,9 +703,9 @@ function frequent(){
 }
 
 /* 入力シート（e を渡すと編集） */
-function openEntry(edit){
+function openEntry(edit, presetDate){
   let val = edit ? String(edit.amount) : '';
-  let date = edit ? edit.date : todayStr();
+  let date = edit ? edit.date : (presetDate || todayStr());
   const favs = frequent();
   const { scrim, sheet, close } = openSheet(`
     <h3>${edit ? '記録をなおす' : '使ったお金'}</h3>
