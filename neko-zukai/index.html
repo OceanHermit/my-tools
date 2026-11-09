@@ -449,14 +449,21 @@ function compute(){
   const remaining = cur.carry + cur.amount - cur.spent;   // 今期の残り
   const spentToday = spentBy[today] || 0;
   const daysLeft = Math.round((next - end) / 864e5);       // 今日を含む残り日数
-  const beforeToday = remaining + spentToday;              // 今朝の時点の残り
-  const base = beforeToday > 0 ? Math.floor(beforeToday / daysLeft) : 0;
+
+  // 1日の額: 期間の予算を日数で割る。使わなかった分はそのまま翌日へ、使いすぎた分は翌日から引く
+  const all = [...periods, cur];
+  const firstDay = firstCountDay(spentBy, today);
+  const plan = dayPlan(cur, all.length === 1 ? firstDay : cur.start);
+  const spentBefore = cur.spent - spentToday;
+  const share = plan.through(today) - plan.through(ymd(addDays(end, -1)));   // 今日の分
+  const carryDay = plan.through(ymd(addDays(end, -1))) - spentBefore;        // 昨日までの繰り越し（マイナスは使いすぎ）
+  const base = share + carryDay;                                             // 今日使える額（朝の時点）
   const todayLeft = base - spentToday;
 
   return {
-    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft,
+    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft, share, carryDay,
     next: ymd(next), recordedToday: data.entries.some(e => e.date === today),
-    stamps: stampsOf([...periods, cur], spentBy, today),
+    stamps: stampsOf(all, spentBy, today, firstDay),
     ...growthOf(cur.carry, periods.length, cfgNow.amount), monthly: cfgNow.amount,
     ...streakOf(spentBy, today),
   };
@@ -488,24 +495,44 @@ function growthOf(carry, closed, monthly){
 
 /* カレンダーのスタンプ。記録のある日ごとに、その日の目安を守れたかを出す
    good = 目安内 / over = 使いすぎ / zero = 使わなかった */
-function stampsOf(periods, spentBy, today){
+function stampsOf(periods, spentBy, today, firstDay){
   const out = {};
-  for(const p of periods){
-    let left = p.carry + p.amount;          // その日の朝の残り
+  periods.forEach((p, i) => {
+    const plan = dayPlan(p, i === 0 ? firstDay : p.start);
+    let before = 0;                         // その日より前に使った額
     const last = parse(p.end);
     for(let d = parse(p.start); d <= last; d = addDays(d, 1)){
       const s = ymd(d);
       if(s > today) break;
       const spent = spentBy[s];
       if(spent !== undefined){
-        const days = Math.round((last - d) / 864e5) + 1;
-        const base = left > 0 ? Math.floor(left / days) : 0;
-        out[s] = spent === 0 ? 'zero' : spent <= base ? 'good' : 'over';
+        const can = plan.through(s) - before;   // 繰り越しを含めた、その日に使える額
+        out[s] = spent === 0 ? 'zero' : spent <= can ? 'good' : 'over';
       }
-      left -= spent || 0;
+      before += spent || 0;
     }
-  }
+  });
   return out;
+}
+
+/* 期間の予算を日割りにする。through(s) = その期間の初めから s の日までに使ってよい額の合計。
+   最後の日にはちょうど予算全体になるので、割り切れない端数も最後に残る */
+function dayPlan(p, from){
+  const start = from > p.start ? from : p.start;
+  const total = Math.round((parse(p.end) - parse(start)) / 864e5) + 1;
+  const budget = p.carry + p.amount;
+  return {
+    through(s){
+      if(s < start) return 0;
+      const k = Math.min(total, Math.round((parse(s) - parse(start)) / 864e5) + 1);
+      return Math.floor(budget * k / total);
+    },
+  };
+}
+/* 最初の期間は、記録を始めた日から数える（それより前の日を「使わなかった日」として繰り越さないため） */
+function firstCountDay(spentBy, today){
+  const days = Object.keys(spentBy).filter(s => s >= data.start).sort();
+  return days.length && days[0] < today ? days[0] : today;
 }
 
 /* 連続記録。あとから入れた日もつながる。今日まだ記録していなくても、昨日までつながっていれば途切れない */
@@ -586,7 +613,7 @@ function render(){
     <section class="today">
       <div class="lbl">今日つかえるお金</div>
       <div class="amt num ${c.todayLeft < 0 ? 'minus' : ''}">${yen(c.todayLeft)}</div>
-      <div class="sub">今日の目安 <b class="num">${yen(c.base)}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
+      <div class="sub">今日の分 <b class="num">${yen(c.share)}</b> ${c.carryDay >= 0 ? '＋ 前日までの繰り越し' : '− 前日までの使いすぎ'} <b class="num">${yen(Math.abs(c.carryDay))}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
     </section>
 
     <section class="stage">
