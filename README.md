@@ -42,6 +42,8 @@ my-tools/
 │   ├── index.html
 │   ├── cat.js            # ネコの絵（骨格から組み立てる SVG）
 │   ├── cat-sheet.html    # ネコの段階・骨格・パーツの確認ページ
+│   ├── manifest.webmanifest  # ホーム画面に追加したときの名前・アイコン
+│   ├── icons/            # アイコン（液体ネコ。180 / 192 / 512 / maskable 512 / favicon 32）
 │   └── firestore.rules
 ├── chirashi-map/
 │   ├── index.html

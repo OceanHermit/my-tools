@@ -449,7 +449,14 @@ function part(group, name, id = 'pt', lv = 1){
   return `<svg viewBox="0 0 240 230">` + defs(id, p) + '<g>' + PARTS[group][name](id, p, k) + '</g></svg>';
 }
 
+/* 頭だけ（アイコンなどに使う）。原点が頭の中心。defs も一緒に返す */
+function headOnly(lv = 1, id = 'hd', eye = 'open', mouth = 'normal'){
+  const p = PAL[lv], k = KNOB[lv]; CUR_ID = id;
+  return defs(id, p) + headKit(id, p, k, eye, mouth);
+}
+
 root.nekoCat = cat;
+root.nekoHead = headOnly;
 root.nekoPart = part;
 root.nekoParts = Object.fromEntries(Object.entries(PARTS).map(([g, o]) => [g, Object.keys(o)]));
 })(typeof window !== 'undefined' ? window : globalThis);
