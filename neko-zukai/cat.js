@@ -170,7 +170,7 @@ function headFace(id, p, k){
       <ellipse cx="0" cy="24" rx="24" ry="17" fill="url(#${id}-muz)"/>
       ${soft('M-12 -38 q2 10 5 17', p.dark, 2.8, .42, id)}${soft('M-4 -41 q1 11 2 19', p.dark, 2.8, .42, id)}${soft('M4 -41 q-1 11 -2 19', p.dark, 2.8, .42, id)}${soft('M12 -38 q-2 10 -5 17', p.dark, 2.8, .42, id)}
       ${soft('M-33 4 q-8 2 -14 0', p.dark, 2.2, .38, id)}${soft('M-32 11 q-8 3 -13 4', p.dark, 2, .32, id)}${soft('M33 4 q8 2 14 0', p.dark, 2.2, .38, id)}${soft('M32 11 q8 3 13 4', p.dark, 2, .32, id)}
-      ${[[-11, 21], [-7, 24], [-12, 26], [11, 21], [7, 24], [12, 26]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".7" fill="${p.dark}" opacity=".5"/>`).join('')}
+      ${[[-10, 13], [-7, 15], [-11, 16.5], [10, 13], [7, 15], [11, 16.5]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r=".7" fill="${p.dark}" opacity=".5"/>`).join('')}
     </g>
     ${edgeHair(pts, { col: p.light, len: 1.8 * k.hairLen, fall: .4, seed: 33, lenAt, jit: .4 * k.messy, op: .7, every: 2, w: .35 })}
   </g>`;
@@ -224,8 +224,8 @@ function headNoseMouth(id, kind){
 function headWhiskers(k){
   let s = '';
   [-1, 1].forEach(d => {
-    [[-6, 38], [0, 40], [7, 36], [12, 30]].forEach(([dy, L], i) => {
-      s += `<path d="M${11 * d} ${19 + i * 2}q${L * .5 * d} ${dy - 3} ${L * d} ${dy}" stroke="#fff" stroke-width=".6" fill="none" stroke-linecap="round" opacity="${.9 * k.wop}"/>`;
+    [[-8, 38], [-2, 40], [4, 37], [9, 32]].forEach(([dy, L], i) => {
+      s += `<path d="M${10 * d} ${12.5 + i * 1.5}q${L * .5 * d} ${dy - 3} ${L * d} ${dy}" stroke="#fff" stroke-width=".6" fill="none" stroke-linecap="round" opacity="${.9 * k.wop}"/>`;
     });
     s += `<path d="M${14 * d} -10q${7 * d} -7 ${12 * d} -9" stroke="#fff" stroke-width=".5" fill="none" opacity="${.7 * k.wop}"/>`;
   });
