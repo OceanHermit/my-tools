@@ -416,6 +416,13 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 輪郭のふちに細い毛を描き、表面はグラデーションとしま模様だけ。`cat-sheet.html` を開くと、
 5段階の絵・骨格を重ねた絵・ポーズごとのパーツを一覧で確かめられる。
 
+### 更新がすぐ反映されないとき
+
+GitHub Pages はファイルを最大10分キャッシュさせる（`cache-control: max-age=600`）。
+`cat.js`・アイコン・マニフェストは `index.html` から `?v=日付` 付きで読んでいるので、
+**これらを変えたら `index.html` と `manifest.webmanifest` の `v=` も書き換える**。
+`index.html` 自体は最大10分古いままのことがある。ホーム画面から開いている場合は、アプリを完全に閉じてから開き直す。
+
 ### 保存の仕組み
 
 専用プロジェクト **`neko-zukai`** を使う。Google ログイン必須（匿名ログインは使わない）。
