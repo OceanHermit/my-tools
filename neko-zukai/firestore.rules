@@ -1,0 +1,43 @@
+rules_version = '2';
+
+// NEKO-ZUKAI（https://oceanhermit.github.io/my-tools/neko-zukai/）用のルール。
+// 対象プロジェクト: neko-zukai
+// Console の Firestore →「ルール」タブに、この中身をそのまま貼る。
+//
+// 記録は users/{uid} の下に1人ぶんずつ置く。読み書きできるのは本人だけ。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isMe(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      // 設定（ネコの名前・開始日・金額と加算日の履歴）
+      allow read, delete: if isMe(uid);
+      allow create, update: if isMe(uid)
+        && request.resource.data.keys().hasOnly(['catName', 'start', 'opening', 'configs'])
+        && request.resource.data.catName is string
+        && request.resource.data.catName.size() <= 12
+        && request.resource.data.start is string
+        && request.resource.data.opening is number
+        && request.resource.data.configs is list;
+
+      // 使ったお金の記録（1件1文書）
+      match /entries/{id} {
+        allow read, delete: if isMe(uid);
+        allow create, update: if isMe(uid)
+          && request.resource.data.keys().hasOnly(['date', 'amount', 'memo', 'at'])
+          && request.resource.data.date is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.amount < 100000000
+          && request.resource.data.memo is string
+          && request.resource.data.memo.size() <= 40
+          && request.resource.data.at is number;
+      }
+    }
+
+    // それ以外の場所は読み書きできない
+  }
+}

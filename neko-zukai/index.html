@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FFF6E9">
+<title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
+<meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFF6E9;
+  --paper:#FFFFFF;
+  --ink:#5A3E2B;
+  --soft:#9A7B62;
+  --line:#EAD6BC;
+  --cream:#FFF1DE;
+  --fur:#E8A25C;
+  --stripe:#C97B3A;
+  --accent:#E08A3C;
+  --accent-dark:#B86A26;
+  --minus:#C8553D;
+  --good:#6C9A4B;
+  --r:18px;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+h1,h2,h3,p{margin:0}
+button,input,select{font:inherit;color:inherit;margin:0}
+button{cursor:pointer}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:"Zen Maru Gothic",system-ui,sans-serif;
+  font-size:15px;line-height:1.6;font-weight:500;
+  min-height:100vh;
+}
+.wrap{max-width:480px;margin:0 auto;padding:0 16px calc(32px + env(safe-area-inset-bottom))}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+
+/* ---- header ---- */
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 0 6px}
+.logo{font-weight:900;letter-spacing:.12em;font-size:15px}
+.logo span{color:var(--accent)}
+.icon-btn{border:0;background:transparent;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--soft)}
+.icon-btn:active{background:var(--cream)}
+
+/* ---- today ---- */
+.today{padding:6px 4px 0}
+.today .lbl{font-size:13px;color:var(--soft)}
+.today .amt{font-size:46px;font-weight:900;line-height:1.1;margin:2px 0 4px;letter-spacing:.01em}
+.today .amt.minus{color:var(--minus)}
+.today .sub{font-size:12.5px;color:var(--soft)}
+.today .sub b{color:var(--ink);font-weight:700}
+
+/* ---- cat ---- */
+.stage{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px}
+.cat{width:230px;height:220px;display:block;cursor:pointer;transform-origin:50% 100%}
+.cat.bounce{animation:bounce .5s ease}
+@keyframes bounce{0%,100%{transform:scale(1,1)}30%{transform:scale(1.06,.94)}60%{transform:scale(.97,1.04)}}
+.cat .tail{transform-origin:148px 208px;animation:tail 3.2s ease-in-out infinite}
+@keyframes tail{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
+.cat .lick-paw{transform-origin:146px 158px;animation:lick 1.1s ease-in-out infinite}
+@keyframes lick{0%,100%{transform:rotate(0)}50%{transform:rotate(4deg)}}
+.cat .twinkle{animation:tw 1.6s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.cat *{animation:none!important}}
+
+/* ---- savings ---- */
+.save-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.save-top .v{font-size:24px;font-weight:900}
+.save-top .v.minus{color:var(--minus)}
+.lv-name{font-size:13px;color:var(--soft)}
+.lv-name b{color:var(--accent);font-weight:900}
+.lv-next{font-size:12px;color:var(--soft);margin-top:6px}
+.lv-steps{display:flex;gap:4px;margin-top:10px}
+.lv-steps i{flex:1;height:6px;border-radius:9px;background:var(--cream)}
+.lv-steps i.on{background:var(--fur)}
+
+/* ---- review ---- */
+.review{text-align:center}
+.review .cat{margin:0 auto;width:200px;height:190px}
+.review .big{font-size:34px;font-weight:900;margin:2px 0}
+.review .big.minus{color:var(--minus)}
+.review p{font-size:14px;color:var(--soft);margin-top:4px}
+.review .up{display:inline-block;margin-top:10px;background:var(--cream);border-radius:99px;padding:6px 14px;font-size:14px;font-weight:700;color:var(--accent-dark)}
+.hist{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.hist th{font-weight:500;color:var(--soft);font-size:12px;text-align:right;padding:4px 2px;border-bottom:1px dashed var(--line)}
+.hist th:first-child,.hist td:first-child{text-align:left}
+.hist td{text-align:right;padding:7px 2px;border-bottom:1px dashed var(--line)}
+.hist td.plus{color:var(--good);font-weight:700}
+.hist td.minus{color:var(--minus);font-weight:700}
+.bubble{
+  position:relative;background:var(--paper);border:2px solid var(--line);
+  border-radius:16px;padding:8px 14px;font-size:14px;margin-top:6px;max-width:90%;text-align:center;
+}
+.bubble::before{
+  content:"";position:absolute;top:-9px;left:50%;margin-left:-8px;
+  border:8px solid transparent;border-top:0;border-bottom-color:var(--line);
+}
+.bubble::after{
+  content:"";position:absolute;top:-6px;left:50%;margin-left:-6px;
+  border:6px solid transparent;border-top:0;border-bottom-color:var(--paper);
+}
+.bubble .who{font-size:11px;color:var(--soft);display:block}
+
+/* ---- buttons ---- */
+.btn{
+  display:block;width:100%;border:0;border-radius:var(--r);padding:16px;font-size:17px;font-weight:700;
+  background:var(--accent);color:#fff;box-shadow:0 4px 0 var(--accent-dark);
+}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--accent-dark)}
+.btn.ghost{background:transparent;color:var(--soft);box-shadow:none;font-size:14px;padding:10px;font-weight:500}
+.btn.ghost:active{transform:none;background:var(--cream)}
+.btn:disabled{opacity:.45}
+.actions{margin-top:14px}
+
+/* ---- cards ---- */
+.card{background:var(--paper);border-radius:var(--r);padding:14px 16px;margin-top:16px;border:1.5px solid var(--line)}
+.card h2{font-size:14px;color:var(--soft);font-weight:700;margin-bottom:8px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.stats .k{font-size:12px;color:var(--soft)}
+.stats .v{font-size:18px;font-weight:700}
+.stats .v.minus{color:var(--minus)}
+.bar{height:10px;background:var(--cream);border-radius:99px;overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;background:var(--fur);border-radius:99px;transition:width .4s}
+.bar.minus i{background:var(--minus)}
+
+/* ---- history ---- */
+.day{margin-top:10px}
+.day:first-of-type{margin-top:0}
+.day-h{display:flex;justify-content:space-between;font-size:12.5px;color:var(--soft);border-bottom:1px dashed var(--line);padding-bottom:3px;margin-bottom:2px}
+.ent{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:7px 2px;text-align:left;border-radius:10px}
+.ent:active{background:var(--cream)}
+.ent .memo{flex:1;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent .memo.none{color:var(--soft)}
+.ent .yen{font-weight:700}
+.empty{color:var(--soft);font-size:13.5px;text-align:center;padding:8px 0}
+
+/* ---- streak ---- */
+.streak{display:flex;align-items:center;gap:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--r);padding:10px 16px;margin-top:16px}
+.streak > svg{width:36px;height:36px;flex:0 0 auto}
+.streak-t{font-size:14px}
+.streak-t b{font-size:28px;font-weight:900;margin-right:2px}
+.streak-t small{display:block;color:var(--soft);font-size:12px;line-height:1.3}
+
+/* ---- calendar ---- */
+.cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.cal-h h2{margin:0;color:var(--ink)}
+.cal-nav,.cal-nav-sp{width:36px;height:32px}
+.cal-nav{border:0;background:transparent;font-size:22px;color:var(--soft);border-radius:10px;line-height:1}
+.cal-nav:active{background:var(--cream)}
+.cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.cal-wd{font-size:11px;color:var(--soft)}
+.cal-d{
+  aspect-ratio:1;border:0;background:transparent;border-radius:10px;position:relative;
+  display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--soft);padding:0;
+}
+button.cal-d:active{background:var(--cream)}
+.cal-d.off{opacity:.4}
+.cal-d.today{outline:2px solid var(--accent);outline-offset:-2px}
+.cal-d svg{width:76%;height:76%}
+.cal-d .n{position:absolute;top:1px;left:4px;font-size:9px;line-height:1}
+.cal-d.stamped svg{animation:stamp .35s ease}
+@keyframes stamp{0%{transform:scale(1.8);opacity:0}70%{transform:scale(.9);opacity:1}100%{transform:scale(1)}}
+.cal-legend{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;font-size:11.5px;color:var(--soft);margin-top:8px}
+.cal-legend span{display:flex;align-items:center;gap:3px}
+.cal-legend svg{width:16px;height:16px}
+
+/* ---- sheet (bottom modal) ---- */
+.scrim{position:fixed;inset:0;background:rgba(90,62,43,.35);z-index:10;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:11;max-width:480px;margin:0 auto;
+  background:var(--bg);border-radius:24px 24px 0 0;padding:10px 16px calc(16px + env(safe-area-inset-bottom));
+  animation:up .25s ease;max-height:92vh;overflow:auto;
+}
+@keyframes up{from{transform:translateY(40%);opacity:.4}}
+.grip{width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 10px}
+.sheet h3{font-size:16px;font-weight:900;text-align:center;margin-bottom:10px}
+
+/* entry */
+.disp{
+  background:var(--paper);border:2px solid var(--line);border-radius:var(--r);
+  padding:8px 16px;text-align:right;font-size:38px;font-weight:900;min-height:64px;
+}
+.disp small{font-size:20px;margin-right:4px;color:var(--soft)}
+.row2{display:flex;gap:8px;margin-top:10px}
+.field{
+  flex:1;min-width:0;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font-size:15px;
+}
+.field:focus{outline:2px solid var(--fur);outline-offset:-1px}
+.date-chip{flex:0 0 auto;position:relative;display:flex;align-items:center;gap:4px;padding:10px 12px;border-radius:12px;background:var(--cream);border:1.5px solid var(--line);font-size:14px;white-space:nowrap}
+.date-chip input{position:absolute;inset:0;opacity:0;width:100%}
+.favs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.fav{display:flex;justify-content:space-between;gap:6px;border:1.5px solid var(--line);background:var(--paper);border-radius:12px;padding:8px 10px;font-size:13px;text-align:left}
+.fav span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft)}
+.fav.on{border-color:var(--fur);background:var(--cream)}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.key{border:0;border-radius:14px;background:var(--paper);font-size:24px;font-weight:700;padding:12px 0;box-shadow:0 2px 0 var(--line)}
+.key:active{transform:translateY(2px);box-shadow:none;background:var(--cream)}
+.key.fn{font-size:18px;color:var(--soft)}
+
+/* forms */
+.form label{display:block;margin-top:14px;font-size:13.5px;font-weight:700}
+.form label .hint{display:block;font-weight:500;font-size:12px;color:var(--soft)}
+.form .field{display:block;width:100%;margin-top:6px}
+.yen-field{position:relative}
+.yen-field::before{content:"¥";position:absolute;left:12px;top:50%;transform:translateY(-50%);margin-top:3px;color:var(--soft)}
+.yen-field .field{padding-left:28px}
+.err{color:var(--minus);font-size:13px;margin-top:10px;min-height:1em}
+
+/* setup page */
+.setup{padding-top:24px}
+.setup .hello{text-align:center}
+.setup .cat{margin:0 auto;width:200px;height:190px}
+.setup .hello h1{font-size:22px;font-weight:900;letter-spacing:.08em;margin-top:4px}
+.setup .hello h1 span{color:var(--accent)}
+.setup .hello p{font-size:13.5px;color:var(--soft);margin-top:6px}
+
+/* login / account */
+.gbtn{
+  display:inline-flex;align-items:center;gap:10px;margin-top:22px;padding:13px 22px;border-radius:99px;
+  background:var(--paper);border:1.5px solid var(--line);font-size:16px;font-weight:700;box-shadow:0 3px 0 var(--line);
+}
+.gbtn:active{transform:translateY(2px);box-shadow:none}
+.acct{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:22px;padding-top:12px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--soft)}
+.acct span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct .btn{width:auto;flex:0 0 auto}
+
+/* toast */
+.toast{
+  position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:14px;z-index:20;
+  animation:fade .2s;white-space:nowrap;
+}
+.note{font-size:12px;color:var(--soft);text-align:center;margin-top:18px}
+</style>
+</head>
+<body>
+
+
+<div class="wrap" id="app"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="cat.js"></script>
+
+<script>
+(() => {
+'use strict';
+
+/* =========================================================
+   保存（Firebase: Google ログイン + Firestore）
+
+   users/{uid}                 catName / start / opening / configs
+   users/{uid}/entries/{id}    date / amount / memo / at
+
+   自分の uid の下しか読み書きできない（firestore.rules）。
+   Firestore のオフライン保存を入れてあるので、圏外でも記録でき、つながると送られる。
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCxsW8vcezsybApzAd73Pazgsi0zPGDqOE",
+  authDomain: "neko-zukai.firebaseapp.com",
+  projectId: "neko-zukai",
+  storageBucket: "neko-zukai.firebasestorage.app",
+  messagingSenderId: "432650311710",
+  appId: "1:432650311710:web:18495f9c6f8573800ab60f"
+};
+const LOCAL_KEY = 'neko-zukai-v1';   // 段階1でこの端末に保存していた記録（ログイン後に一度だけ引き継ぐ）
+
+/*
+  data = {
+    catName: 'ミケ',
+    start:   'YYYY-MM-DD',       // 記録を始めた期間の開始日
+    opening: 30000,              // 始めたときの「今期の残り」
+    configs: [{from:'YYYY-MM-DD', amount:30000, payday:25}],  // 設定の履歴（過去の期間を書き換えないため）
+    entries: [{id, date:'YYYY-MM-DD', amount:500, memo:'', at:ms}],
+  }
+*/
+let data = null;
+const FB = { state: 'loading', msg: '', user: null, db: null, profile: undefined, entries: null, unsub: [] };
+
+const userRef  = () => FB.db.collection('users').doc(FB.user.uid);
+const entryCol = () => userRef().collection('entries');
+const PROFILE_KEYS = ['catName','start','opening','configs'];
+const profileOf = d => Object.fromEntries(PROFILE_KEYS.map(k => [k, d[k]]));
+
+function fbMessage(e){
+  const c = e && e.code;
+  if(c === 'no-sdk') return 'ネットにつながらず、準備ができませんでした。通信を確かめて、開き直してください。';
+  if(c === 'permission-denied') return 'Firestore のルールで許可されていません。ルールが反映されているか確かめてください。';
+  if(c === 'auth/operation-not-allowed') return 'Firebase 側で Google ログインが有効になっていません。';
+  if(c === 'auth/unauthorized-domain') return 'このドメインが Firebase の「承認済みドメイン」に入っていません。';
+  if(c === 'unavailable' || c === 'auth/network-request-failed') return '通信が届きませんでした。電波を確かめて、もう一度お試しください。';
+  return 'うまくいきませんでした（' + (c || 'unknown') + '）。';
+}
+const saveErr = e => toast(fbMessage(e));
+
+/* snapshot が来るたびに data を組み立て直す */
+function rebuild(){
+  if(FB.profile === undefined || FB.entries === null){ data = null; return; }
+  data = FB.profile ? { ...FB.profile, entries: FB.entries } : null;
+}
+
+function connect(){
+  if(typeof firebase === 'undefined'){ FB.state = 'error'; FB.msg = fbMessage({ code:'no-sdk' }); render(); return; }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    FB.db = firebase.firestore();
+    FB.db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  }catch(e){ FB.state = 'error'; FB.msg = fbMessage(e); render(); return; }
+
+  const auth = firebase.auth();
+  auth.getRedirectResult().catch(e => { if(e && e.code) toast(fbMessage(e)); });
+  auth.onAuthStateChanged(user => {
+    FB.unsub.forEach(f => f()); FB.unsub = [];
+    FB.user = user; FB.profile = undefined; FB.entries = null; FB.profileLive = FB.entriesLive = false; data = null;
+    if(!user){ FB.state = 'signedout'; render(); return; }
+    FB.state = 'ready'; render();
+    const fail = e => { FB.state = 'error'; FB.msg = fbMessage(e); render(); };
+    FB.unsub.push(userRef().onSnapshot({ includeMetadataChanges: true }, s => {
+      FB.profile = s.exists ? s.data() : null;
+      FB.profileLive = !s.metadata.fromCache;
+      if(!s.exists && !s.metadata.fromCache) migrateLocal();
+      rebuild(); render();
+    }, fail));
+    FB.unsub.push(entryCol().onSnapshot({ includeMetadataChanges: true }, s => {
+      FB.entries = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      FB.entriesLive = !s.metadata.fromCache;
+      rebuild(); render();
+    }, fail));
+  });
+}
+
+function googleProvider(){
+  const p = new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({ prompt: 'select_account' });
+  return p;
+}
+async function signIn(){
+  const auth = firebase.auth();
+  try{ await auth.signInWithPopup(googleProvider()); }
+  catch(e){
+    const c = e && e.code;
+    if(c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return;
+    if(c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-environment'){
+      try{ await auth.signInWithRedirect(googleProvider()); }catch(e2){ toast(fbMessage(e2)); }
+      return;
+    }
+    toast(fbMessage(e));
+  }
+}
+
+/* 段階1でこの端末に保存していた記録を、クラウドが空のときだけ引き継ぐ */
+let migrating = false;
+async function migrateLocal(){
+  if(migrating) return;
+  let local = null;
+  try{ local = JSON.parse(localStorage.getItem(LOCAL_KEY)); }catch(e){}
+  if(!local || !local.start) return;
+  migrating = true;
+  try{
+    const list = local.entries || [];
+    for(let i = 0; i < list.length; i += 400){
+      const b = FB.db.batch();
+      for(const e of list.slice(i, i + 400)){
+        const { id, ...rest } = e;
+        b.set(entryCol().doc(id), rest);
+      }
+      await b.commit();
+    }
+    await userRef().set(profileOf(local));
+    localStorage.setItem(LOCAL_KEY + '-migrated', localStorage.getItem(LOCAL_KEY));
+    localStorage.removeItem(LOCAL_KEY);
+    toast('この端末の記録を引き継いだにゃ');
+  }catch(e){ saveErr(e); }
+  migrating = false;
+}
+
+/* =========================================================
+   日付
+   ========================================================= */
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
+const dim = (y, m) => new Date(y, m+1, 0).getDate();   // その月の日数
+const todayStr = () => ymd(new Date());
+const WD = ['日','月','火','水','木','金','土'];
+const md = s => { const d = parse(s); return `${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`; };
+const yen = n => (n < 0 ? '−' : '') + '¥' + Math.abs(Math.round(n)).toLocaleString('ja-JP');
+
+/* 加算日（31日などは月末に寄せる） */
+const isPayday = (d, payday) => d.getDate() === Math.min(payday, dim(d.getFullYear(), d.getMonth()));
+
+/* d を含む期間の開始日 */
+function periodStartOf(d, payday){
+  for(let i=0; i<32; i++){ const x = addDays(d, -i); if(isPayday(x, payday)) return x; }
+  return d;
+}
+function configAt(s){
+  let c = data.configs[0];
+  for(const x of data.configs) if(x.from <= s) c = x;
+  return c;
+}
+
+/* =========================================================
+   計算
+   ========================================================= */
+function compute(){
+  const today = todayStr();
+  const spentBy = {};
+  for(const e of data.entries) spentBy[e.date] = (spentBy[e.date]||0) + e.amount;
+
+  // 開始日から今日まで1日ずつ進め、加算日が来たら期間を区切る
+  const periods = [];
+  let cur = { start: data.start, carry: 0, amount: data.opening, spent: 0 };
+  let d = parse(data.start);
+  const end = parse(today);
+  while(d <= end){
+    const s = ymd(d);
+    const cfg = configAt(s);
+    if(s !== data.start && isPayday(d, cfg.payday)){
+      const left = cur.carry + cur.amount - cur.spent;
+      cur.end = ymd(addDays(d, -1));
+      periods.push(cur);
+      cur = { start: s, carry: left, amount: cfg.amount, spent: 0 };
+    }
+    cur.spent += spentBy[s] || 0;
+    d = addDays(d, 1);
+  }
+
+  // 次の加算日（今の設定で探す）
+  const cfgNow = configAt(today);
+  let next = addDays(end, 1);
+  while(!isPayday(next, cfgNow.payday)) next = addDays(next, 1);
+  cur.end = ymd(addDays(next, -1));
+
+  const remaining = cur.carry + cur.amount - cur.spent;   // 今期の残り
+  const spentToday = spentBy[today] || 0;
+  const daysLeft = Math.round((next - end) / 864e5);       // 今日を含む残り日数
+  const beforeToday = remaining + spentToday;              // 今朝の時点の残り
+  const base = beforeToday > 0 ? Math.floor(beforeToday / daysLeft) : 0;
+  const todayLeft = base - spentToday;
+
+  return {
+    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft,
+    next: ymd(next), recordedToday: data.entries.some(e => e.date === today),
+    stamps: stampsOf([...periods, cur], spentBy, today),
+    ...growthOf(cur.carry, periods.length, cfgNow.amount), monthly: cfgNow.amount,
+    ...streakOf(spentBy, today),
+  };
+}
+
+/* 貯まった額とネコの段階。
+   貯まった額 = これまでの期間の余りの合計（= 今期に繰り越された額）。
+   段階は毎月の額に対する割合で決める */
+const LEVELS = [
+  { name: 'ぼさぼさ', min: -Infinity },
+  { name: 'ふつう', min: 0 },
+  { name: '毛づくろい', min: .1 },
+  { name: 'にっこり', min: .5 },
+  { name: '液体ネコ', min: 1 },
+];
+function levelOf(saved, monthly){
+  if(saved < 0) return 0;
+  const r = monthly > 0 ? saved / monthly : 0;
+  let lv = 1;
+  for(let i = 2; i < LEVELS.length; i++) if(r >= LEVELS[i].min) lv = i;
+  return lv;
+}
+function growthOf(carry, closed, monthly){
+  const saved = closed ? carry : 0;
+  const level = levelOf(saved, monthly);
+  const next = level < LEVELS.length - 1 ? Math.max(0, Math.ceil(LEVELS[level + 1].min * monthly) - saved) : 0;
+  return { saved, level, toNext: level === 0 ? -saved : next };
+}
+
+/* カレンダーのスタンプ。記録のある日ごとに、その日の目安を守れたかを出す
+   good = 目安内 / over = 使いすぎ / zero = 使わなかった */
+function stampsOf(periods, spentBy, today){
+  const out = {};
+  for(const p of periods){
+    let left = p.carry + p.amount;          // その日の朝の残り
+    const last = parse(p.end);
+    for(let d = parse(p.start); d <= last; d = addDays(d, 1)){
+      const s = ymd(d);
+      if(s > today) break;
+      const spent = spentBy[s];
+      if(spent !== undefined){
+        const days = Math.round((last - d) / 864e5) + 1;
+        const base = left > 0 ? Math.floor(left / days) : 0;
+        out[s] = spent === 0 ? 'zero' : spent <= base ? 'good' : 'over';
+      }
+      left -= spent || 0;
+    }
+  }
+  return out;
+}
+
+/* 連続記録。あとから入れた日もつながる。今日まだ記録していなくても、昨日までつながっていれば途切れない */
+function streakOf(spentBy, today){
+  const has = s => spentBy[s] !== undefined;
+  let d = parse(today);
+  if(!has(today)) d = addDays(d, -1);
+  let streak = 0;
+  while(has(ymd(d))){ streak++; d = addDays(d, -1); }
+
+  let best = 0, run = 0, prev = null;
+  for(const s of Object.keys(spentBy).sort()){
+    run = prev && ymd(addDays(parse(prev), 1)) === s ? run + 1 : 1;
+    best = Math.max(best, run); prev = s;
+  }
+  return { streak, best };
+}
+
+/* =========================================================
+   ネコのせりふ
+   ========================================================= */
+const LINES = {
+  waiting: ['きょうは何に使ったにゃ？','記録をまってるにゃ','使わなかった日も教えてほしいにゃ'],
+  happy:   ['きょうも記録えらいにゃ','いい調子だにゃ','おさいふにやさしい一日だにゃ','この調子でいくにゃ'],
+  over:    ['ちょっと使いすぎたにゃ…','だいじょうぶ、あしたの目安がすこし下がるだけにゃ','あしたから取りもどすにゃ'],
+  minus:   ['今期はマイナスだにゃ…','次の加算日までがまんだにゃ','マイナスの分は次の期間から引かれるにゃ'],
+  zero:    ['使わない日、すてきだにゃ','おさいふがよろこんでるにゃ'],
+  pet:     ['にゃ〜ん','ごろごろ…','なでてくれてうれしいにゃ','ふみふみ…'],
+  saved:   ['記録したにゃ！','ちゃんと書けてえらいにゃ','おぼえたにゃ'],
+};
+const pick = a => a[Math.floor(Math.random()*a.length)];
+
+function moodOf(c){
+  if(c.remaining < 0) return { face:'sad', line: pick(LINES.minus) };
+  if(c.todayLeft < 0) return { face:'worried', line: pick(LINES.over) };
+  if(c.recordedToday && c.spentToday === 0) return { face:'happy', line: pick(LINES.zero) };
+  if(c.recordedToday) return { face:'happy', line: pick(LINES.happy) };
+  return { face:'normal', line: pick(LINES.waiting) };
+}
+
+/* =========================================================
+   描画
+   ========================================================= */
+const $app = document.getElementById('app');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* 直前に言わせたいせりふ（記録した直後など）。同期で描き直しても数秒は残す */
+let said = { text: '', until: 0 };
+const say = text => { said = { text, until: Date.now() + 4000 }; };
+/* 表情が変わらない間は、せりふを毎回くじ引きし直さない */
+let moodMemo = { face: '', line: '' };
+
+function render(){
+  if(FB.state === 'loading') return renderMessage('準備しているにゃ…');
+  if(FB.state === 'error') return renderMessage(FB.msg, 'sad', true);
+  if(FB.state === 'signedout') return renderLogin();
+  if(FB.profile === undefined || FB.entries === null) return renderMessage('記録を読みこんでいるにゃ…');
+  // 初期設定の入力中は、同期が届いても描き直さない（打ちかけが消えるので）
+  if(!data){ if(!migrating && !$app.querySelector('#f-name')) renderSetup(); return; }
+  const c = compute();
+  const mood = moodOf(c);
+  if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
+  const line = said.until > Date.now() ? said.text : moodMemo.line;
+  const budget = c.cur.carry + c.cur.amount;
+  const usedPct = budget > 0 ? Math.min(100, Math.max(0, c.remaining / budget * 100)) : 0;
+
+  const byDay = {};
+  for(const e of data.entries) if(e.date >= c.cur.start) (byDay[e.date] ||= []).push(e);
+  const days = Object.keys(byDay).sort().reverse();
+
+  $app.innerHTML = `
+    <header>
+      <div class="logo">NEKO<span>-</span>ZUKAI</div>
+      <button class="icon-btn" id="open-settings" aria-label="設定">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <section class="today">
+      <div class="lbl">今日つかえるお金</div>
+      <div class="amt num ${c.todayLeft < 0 ? 'minus' : ''}">${yen(c.todayLeft)}</div>
+      <div class="sub">今日の目安 <b class="num">${yen(c.base)}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
+    </section>
+
+    <section class="stage">
+      <div id="cat-slot"></div>
+      <div class="bubble" id="bubble"><span class="who">${esc(data.catName)}</span><span id="line">${esc(line)}</span></div>
+    </section>
+
+    <div class="actions">
+      <button class="btn" id="open-entry">🐾 使ったお金を入れる</button>
+      ${c.recordedToday ? '' : '<button class="btn ghost" id="zero-day">今日は使わなかった</button>'}
+    </div>
+
+    <section class="streak">
+      ${PAW('#E08A3C')}
+      <div class="streak-t">
+        ${c.streak ? `<b class="num">${c.streak}</b>日れんぞく` : '<b class="num">0</b>日'}
+        <small>${c.recordedToday ? `いちばん長い記録 ${c.best}日` : c.streak ? '今日記録すると、もう1日のびるにゃ' : '今日から始めるにゃ'}</small>
+      </div>
+    </section>
+
+    <section class="card save">
+      <div class="save-top"><h2 style="margin:0">貯まった額</h2><span class="v num ${c.saved < 0 ? 'minus' : ''}">${yen(c.saved)}</span></div>
+      <div class="lv-name">${esc(data.catName)}は いま <b>${LEVELS[c.level].name}</b></div>
+      <div class="lv-steps">${LEVELS.map((_, i) => `<i class="${i <= c.level && c.level > 0 ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="lv-next">${c.level === 0 ? `あと ${yen(c.toNext)} で ふつうに戻るにゃ`
+        : c.level < LEVELS.length - 1 ? `あと ${yen(c.toNext)} 貯まると「${LEVELS[c.level + 1].name}」になるにゃ`
+        : 'いちばん上の段階だにゃ。ずっとこのままでいたいにゃ'}</div>
+      <div class="lv-next">${c.periods.length ? '' : '加算日に余った分が、ここに貯まっていくにゃ'}</div>
+      ${c.periods.length ? '<button class="btn ghost" id="open-history" style="margin-top:4px">これまでの振り返り</button>' : ''}
+    </section>
+
+    ${calendarHTML(c)}
+
+    <section class="card">
+      <h2>今期（${md(c.cur.start)} 〜 ${md(c.cur.end)}）</h2>
+      <div class="stats">
+        <div><div class="k">今期の残り</div><div class="v num ${c.remaining < 0 ? 'minus' : ''}">${yen(c.remaining)}</div></div>
+        <div><div class="k">次の加算日まで</div><div class="v num">あと${c.daysLeft}日</div></div>
+        <div><div class="k">今期使える額</div><div class="v num">${yen(budget)}</div></div>
+        <div><div class="k">${c.periods.length ? '先月からの繰越' : '開始時の残り'}</div><div class="v num ${c.cur.carry < 0 ? 'minus' : ''}">${c.periods.length ? yen(c.cur.carry) : yen(c.cur.amount)}</div></div>
+      </div>
+      <div class="bar ${c.remaining < 0 ? 'minus' : ''}"><i style="width:${usedPct}%"></i></div>
+    </section>
+
+    <section class="card">
+      <h2>今期の記録</h2>
+      ${days.length ? days.map(day => {
+        const list = byDay[day].slice().sort((a,b) => b.at - a.at);
+        const sum = list.reduce((s,e) => s + e.amount, 0);
+        return `<div class="day">
+          <div class="day-h"><span>${md(day)}</span><span class="num">${yen(sum)}</span></div>
+          ${list.map(e => `<button class="ent" data-id="${e.id}">
+            <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
+            <span class="yen num">${yen(e.amount)}</span></button>`).join('')}
+        </div>`;
+      }).join('') : '<p class="empty">まだ記録がないにゃ</p>'}
+    </section>
+    <p class="note">記録は ${esc(FB.user.email || 'Google アカウント')} に保存されています</p>
+  `;
+
+  const slot = $app.querySelector('#cat-slot');
+  slot.replaceWith(makeCat(c.level, mood.face));
+  $app.querySelector('#open-entry').onclick = () => openEntry();
+  $app.querySelector('#open-settings').onclick = openSettings;
+  const z = $app.querySelector('#zero-day');
+  if(z) z.onclick = () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); };
+  $app.querySelectorAll('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
+  $app.querySelectorAll('.cal-d[data-d]').forEach(b => b.onclick = () => openEntry(null, b.dataset.d));
+  $app.querySelectorAll('.cal-nav').forEach(b => b.onclick = () => { calMonth = b.dataset.m; render(); });
+  const h = $app.querySelector('#open-history'); if(h) h.onclick = () => openHistory(c);
+  maybeReview(c);
+}
+
+/* =========================================================
+   締めの振り返り（加算日のあと、初めて開いたときに一度だけ）
+   ========================================================= */
+const seenKey = () => 'neko-zukai-review-' + FB.user.uid;
+function maybeReview(c){
+  // 手元のキャッシュだけで判断すると記録が足りずに数字を間違えるので、サーバーから届いてから
+  if(!FB.profileLive || !FB.entriesLive) return;
+  if(document.querySelector('.sheet')) return;
+  let seen = null; try{ seen = localStorage.getItem(seenKey()); }catch(e){}
+  if(seen === c.cur.start) return;
+  try{ localStorage.setItem(seenKey(), c.cur.start); }catch(e){}
+  if(!c.periods.length) return;   // まだ締めたことがない
+  const last = c.periods[c.periods.length - 1];
+  const surplus = last.amount - last.spent;               // その期間に浮かせた額
+  const before = c.periods.length > 1 ? c.periods[c.periods.length - 2] : null;
+  const prevLv = levelOf(c.periods.length > 1 ? last.carry : 0, c.monthly);
+  const lunch = Math.floor(surplus / 800);
+  const { sheet, close } = openSheet(`
+    <div class="review">
+      <div id="rv-cat"></div>
+      <p>${md(last.start)} 〜 ${md(last.end)} の振り返り</p>
+      <div class="big num ${surplus < 0 ? 'minus' : ''}">${surplus >= 0 ? yen(surplus) + ' 浮いたにゃ！' : yen(-surplus) + ' 使いすぎたにゃ…'}</div>
+      ${surplus > 0 && lunch > 0 ? `<p>ランチ ${lunch}回分のお金を、使わずにすんだにゃ</p>` : ''}
+      ${before ? `<p>その前の期間より ${surplus - (before.amount - before.spent) >= 0 ? yen(surplus - (before.amount - before.spent)) + ' 多く' : yen((before.amount - before.spent) - surplus) + ' 少なく'}浮いたにゃ</p>` : ''}
+      <p>貯まった額は ${yen(c.saved)} になったにゃ</p>
+      ${c.level > prevLv ? `<div class="up">${esc(data.catName)}が「${LEVELS[c.level].name}」になったにゃ！</div>` : ''}
+      ${c.level < prevLv ? `<div class="up">${esc(data.catName)}が「${LEVELS[c.level].name}」になっちゃったにゃ…</div>` : ''}
+      <button class="btn" id="rv-ok" style="margin-top:18px">${surplus >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
+    </div>`);
+  sheet.querySelector('#rv-cat').replaceWith(makeCat(c.level, surplus >= 0 ? 'happy' : 'worried', 'rv'));
+  sheet.querySelector('#rv-ok').onclick = close;
+}
+
+/* これまでの期間の一覧 */
+function openHistory(c){
+  const rows = c.periods.slice().reverse().map(p => {
+    const sur = p.amount - p.spent;
+    return `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${sur >= 0 ? 'plus' : 'minus'}">${sur >= 0 ? '+' : ''}${yen(sur)}</td><td class="num">${yen(p.carry + sur)}</td></tr>`;
+  }).join('');
+  const { sheet } = openSheet(`
+    <h3>これまでの振り返り</h3>
+    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>浮いた</th><th>貯まった額</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note">「浮いた」は、その期間に足された額から使った額を引いたものだにゃ</p>`);
+}
+
+/* =========================================================
+   カレンダー（肉球スタンプ）
+   ========================================================= */
+const PAW = c => `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="26" rx="9" ry="8" fill="${c}"/><circle cx="9" cy="16" r="4" fill="${c}"/><circle cx="16" cy="9" r="4" fill="${c}"/><circle cx="24" cy="9" r="4" fill="${c}"/><circle cx="31" cy="16" r="4" fill="${c}"/></svg>`;
+const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E' };
+const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった' };
+let calMonth = null;   // 'YYYY-MM'。null なら今月
+let seenStamps = null; // 前回描いたスタンプ。新しく押された日だけ動かす
+
+function calendarHTML(c){
+  const ym = s => s.slice(0, 7);
+  const first = ym(data.start), last = ym(c.today);
+  let m = calMonth || last;
+  if(m < first) m = first;
+  if(m > last) m = last;
+  const [y, mo] = m.split('-').map(Number);
+  const shift = k => { const d = new Date(y, mo - 1 + k, 1); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+
+  let cells = WD.map(w => `<div class="cal-wd">${w}</div>`).join('');
+  for(let i = 0; i < new Date(y, mo - 1, 1).getDay(); i++) cells += '<div></div>';
+  for(let d = 1; d <= dim(y, mo - 1); d++){
+    const s = `${m}-${pad(d)}`;
+    const st = c.stamps[s];
+    const fresh = st && seenStamps && seenStamps[s] !== st;
+    const can = s >= data.start && s <= c.today;
+    const label = `${mo}月${d}日${st ? ' ' + STAMP_LABEL[st] : ''}`;
+    cells += `<${can ? 'button' : 'div'} class="cal-d ${s === c.today ? 'today' : ''} ${can ? '' : 'off'} ${fresh ? 'stamped' : ''}" ${can ? `data-d="${s}" aria-label="${label}"` : ''}>
+      ${st ? `<span class="n">${d}</span>${PAW(STAMP[st])}` : d}</${can ? 'button' : 'div'}>`;
+  }
+  const nav = (k, txt, show) => show
+    ? `<button class="cal-nav" data-m="${shift(k)}" aria-label="${k < 0 ? '前の月' : '次の月'}">${txt}</button>`
+    : '<span class="cal-nav-sp"></span>';
+  seenStamps = { ...c.stamps };
+  return `<section class="card cal">
+    <div class="cal-h">${nav(-1, '‹', m > first)}<h2>${y}年 ${mo}月</h2>${nav(1, '›', m < last)}</div>
+    <div class="cal-g">${cells}</div>
+    <div class="cal-legend">${Object.keys(STAMP).map(k => `<span>${PAW(STAMP[k])}${STAMP_LABEL[k]}</span>`).join('')}</div>
+  </section>`;
+}
+
+/* ネコの絵（cat.js）。段階でポーズと毛並み、その日の様子で表情が変わる */
+const catCache = {};
+function faceOpt(lv, face){
+  if(face === 'worried' || face === 'sad') return { eye: 'tired', mouth: 'frown' };
+  if(face === 'happy') return lv === 0 ? { eye: 'tired', mouth: 'normal' } : lv === 3 ? {} : { eye: 'happy', mouth: 'normal' };
+  return {};
+}
+function makeCat(lv = 1, face = 'normal', key = 'nk'){
+  const opt = faceOpt(lv, face), ck = `${key}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
+  if(!catCache[ck]) catCache[ck] = window.nekoCat ? nekoCat(lv, ck, opt) : '<svg class="cat" viewBox="0 0 240 230"></svg>';
+  const box = document.createElement('div'); box.innerHTML = catCache[ck];
+  const svg = box.firstElementChild;
+  svg.addEventListener('click', () => {
+    svg.classList.remove('bounce'); void svg.offsetWidth; svg.classList.add('bounce');
+    const l = document.getElementById('line'); if(l) l.textContent = pick(LINES.pet);
+  });
+  return svg;
+}
+
+/* =========================================================
+   記録
+   ========================================================= */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+/* 書き込むと Firestore の手元キャッシュがすぐ snapshot を返すので、描き直しはそちらに任せる */
+function addEntry(e){
+  entryCol().doc(uid()).set({ at: Date.now(), ...e }).catch(saveErr);
+}
+function updateEntry(id, patch){
+  entryCol().doc(id).update(patch).catch(saveErr);
+}
+function deleteEntry(id){
+  entryCol().doc(id).delete().catch(saveErr);
+}
+function saveProfile(p){
+  return userRef().set(p).catch(saveErr);
+}
+
+/* よく入れる「金額＋メモ」。2回以上入れたものを、回数 → 新しさの順に4つまで */
+function frequent(){
+  const m = new Map();
+  for(const e of data.entries){
+    if(!e.amount) continue;
+    const k = e.amount + '\u0000' + e.memo;
+    const x = m.get(k) || { amount: e.amount, memo: e.memo, n: 0, at: 0 };
+    x.n++; x.at = Math.max(x.at, e.at); m.set(k, x);
+  }
+  return [...m.values()].filter(x => x.n >= 2).sort((a,b) => b.n - a.n || b.at - a.at).slice(0, 4);
+}
+
+/* 入力シート（e を渡すと編集） */
+function openEntry(edit, presetDate){
+  let val = edit ? String(edit.amount) : '';
+  let date = edit ? edit.date : (presetDate || todayStr());
+  const favs = frequent();
+  const { scrim, sheet, close } = openSheet(`
+    <h3>${edit ? '記録をなおす' : '使ったお金'}</h3>
+    <div class="disp num"><small>¥</small><span id="val"></span></div>
+    <div class="row2">
+      <label class="date-chip"><span id="date-txt"></span> ▾<input type="date" id="date" max="${todayStr()}" min="${data.start}"></label>
+      <input class="field" id="memo" placeholder="メモ（例: ランチ）" maxlength="40" value="${edit ? esc(edit.memo) : ''}">
+    </div>
+    ${!edit && favs.length ? `<div class="favs">${favs.map((f,i) =>
+      `<button class="fav" data-i="${i}"><span>${esc(f.memo || 'メモなし')}</span><b class="num">${yen(f.amount)}</b></button>`).join('')}</div>` : ''}
+    <div class="keys">
+      ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="key" data-k="${n}">${n}</button>`).join('')}
+      <button class="key fn" data-k="00">00</button>
+      <button class="key" data-k="0">0</button>
+      <button class="key fn" data-k="bs" aria-label="1文字けす">⌫</button>
+    </div>
+    <button class="btn" id="save">記録する</button>
+    ${edit ? '<button class="btn ghost" id="del" style="margin-top:8px;color:var(--minus)">この記録を消す</button>' : ''}
+  `);
+  const $val = sheet.querySelector('#val'), $save = sheet.querySelector('#save');
+  const $date = sheet.querySelector('#date'), $dtxt = sheet.querySelector('#date-txt');
+  const paint = () => {
+    $val.textContent = val ? Number(val).toLocaleString('ja-JP') : '0';
+    $save.disabled = !val && !edit;
+    $dtxt.textContent = date === todayStr() ? '今日' : md(date);
+  };
+  $date.value = date;
+  $date.onchange = () => { if($date.value) date = $date.value; paint(); };
+  sheet.querySelectorAll('.key').forEach(k => k.onclick = () => {
+    const x = k.dataset.k;
+    if(x === 'bs') val = val.slice(0, -1);
+    else if(val.length < 8) val = (val + x).replace(/^0+/, '');
+    paint();
+  });
+  sheet.querySelectorAll('.fav').forEach(b => b.onclick = () => {
+    const f = favs[b.dataset.i];
+    val = String(f.amount); sheet.querySelector('#memo').value = f.memo;
+    sheet.querySelectorAll('.fav').forEach(x => x.classList.toggle('on', x === b));
+    paint();
+  });
+  $save.onclick = () => {
+    const amount = Number(val || 0);
+    const memo = sheet.querySelector('#memo').value.trim();
+    close();
+    if(edit){ updateEntry(edit.id, { amount, memo, date }); toast('なおしたにゃ'); }
+    else { say(pick(LINES.saved)); addEntry({ date, amount, memo }); }
+  };
+  const del = sheet.querySelector('#del');
+  if(del) del.onclick = () => {
+    if(!confirm('この記録を消しますか？')) return;
+    close(); deleteEntry(edit.id); toast('消したにゃ');
+  };
+  paint();
+}
+
+/* =========================================================
+   設定
+   ========================================================= */
+function settingsForm(v){
+  return `
+    <div class="form">
+      <label>ネコの名前<input class="field" id="f-name" maxlength="12" value="${esc(v.catName)}" placeholder="例: ミケ"></label>
+      <label>毎月自由に使えるお金
+        <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${v.amount || ''}" placeholder="30000"></div>
+      </label>
+      <label>お金が加算される日<span class="hint">29〜31日を選ぶと、短い月は月末に加算します</span>
+        <select class="field" id="f-payday">${Array.from({length:31}, (_,i) => `<option value="${i+1}" ${i+1 === v.payday ? 'selected' : ''}>毎月 ${i+1}日</option>`).join('')}</select>
+      </label>
+      ${v.setup ? `<label>今期の残り<span class="hint">いま自由に使えるお金。加算日に受け取ったばかりなら、毎月の額と同じです</span>
+        <div class="yen-field"><input class="field num" id="f-opening" inputmode="numeric" placeholder="毎月の額と同じ"></div></label>` : ''}
+      <p class="err" id="f-err"></p>
+    </div>`;
+}
+function readForm(root, setup){
+  const n = s => Number(String(s).replace(/[^\d]/g, ''));
+  const name = root.querySelector('#f-name').value.trim();
+  const amountRaw = root.querySelector('#f-amount').value;
+  const amount = n(amountRaw);
+  const payday = Number(root.querySelector('#f-payday').value);
+  let opening = amount;
+  if(setup){ const o = root.querySelector('#f-opening').value; if(o.trim() !== '') opening = n(o); }
+  if(!name) return { err: 'ネコの名前を入れてほしいにゃ' };
+  if(!amount) return { err: '毎月の金額を入れてほしいにゃ' };
+  return { name, amount, payday, opening };
+}
+
+function renderSetup(){
+  $app.innerHTML = `
+    <div class="setup">
+      <div class="hello">
+        <div id="cat-slot"></div>
+        <h1>NEKO<span>-</span>ZUKAI</h1>
+        <p>はじめまして。まずは名前をつけてほしいにゃ</p>
+      </div>
+      <div class="card">${settingsForm({ catName:'', amount:'', payday:25, setup:true })}
+        <button class="btn" id="start" style="margin-top:6px">はじめる</button>
+      </div>
+    </div>`;
+  $app.querySelector('#cat-slot').replaceWith(makeCat(1, 'normal'));
+  $app.querySelector('#start').onclick = () => {
+    const f = readForm($app, true);
+    if(f.err){ $app.querySelector('#f-err').textContent = f.err; return; }
+    const start = ymd(periodStartOf(new Date(), f.payday));
+    say(`${f.name}だにゃ。よろしくにゃ！`);
+    $app.innerHTML = '';
+    saveProfile({
+      catName: f.name, start, opening: f.opening,
+      configs: [{ from: start, amount: f.amount, payday: f.payday }],
+    });
+  };
+}
+
+/* ネコと一言だけの画面（読みこみ中・エラー） */
+function renderMessage(msg, face = 'normal', retry = false){
+  $app.innerHTML = `
+    <div class="setup"><div class="hello">
+      <div id="cat-slot"></div>
+      <h1>NEKO<span>-</span>ZUKAI</h1>
+      <p>${esc(msg)}</p>
+      ${retry ? '<button class="btn" id="retry" style="margin-top:20px">開き直す</button>' : ''}
+    </div></div>`;
+  $app.querySelector('#cat-slot').replaceWith(makeCat(1, face));
+  const r = $app.querySelector('#retry'); if(r) r.onclick = () => location.reload();
+}
+
+const GLOGO = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 7-10.3 7-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+
+function renderLogin(){
+  $app.innerHTML = `
+    <div class="setup"><div class="hello">
+      <div id="cat-slot"></div>
+      <h1>NEKO<span>-</span>ZUKAI</h1>
+      <p>ログインすると、スマホでもパソコンでも<br>同じ記録を見られるにゃ</p>
+      <button class="gbtn" id="signin">${GLOGO}<span>Google でログイン</span></button>
+    </div></div>`;
+  $app.querySelector('#cat-slot').replaceWith(makeCat(1, 'normal'));
+  $app.querySelector('#signin').onclick = signIn;
+}
+
+function openSettings(){
+  const cfg = configAt(todayStr());
+  const { sheet, close } = openSheet(`
+    <h3>設定</h3>
+    ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday })}
+    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日から反映されます。それまでの記録はそのままです。</p>
+    <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
+    <div class="acct">
+      <span>${esc(FB.user.email || '')} でログイン中</span>
+      <button class="btn ghost" id="s-out">ログアウト</button>
+    </div>
+    <button class="btn ghost" id="s-reset" style="margin-top:6px;color:var(--minus)">すべての記録を消して最初から</button>
+  `);
+  sheet.querySelector('#s-save').onclick = () => {
+    const f = readForm(sheet, false);
+    if(f.err){ sheet.querySelector('#f-err').textContent = f.err; return; }
+    const p = profileOf(data);
+    p.catName = f.name;
+    if(f.amount !== cfg.amount || f.payday !== cfg.payday){
+      const t = todayStr();
+      p.configs = p.configs.filter(x => x.from !== t || x === p.configs[0]);
+      p.configs.push({ from: t, amount: f.amount, payday: f.payday });
+    }
+    close(); saveProfile(p); toast('保存したにゃ');
+  };
+  sheet.querySelector('#s-out').onclick = () => { close(); firebase.auth().signOut().catch(saveErr); };
+  sheet.querySelector('#s-reset').onclick = async () => {
+    if(!confirm('すべての記録と設定を消します。ほかの端末からも消えて、元に戻せません。よろしいですか？')) return;
+    close();
+    try{
+      const ids = data.entries.map(e => e.id);
+      for(let i = 0; i < ids.length; i += 400){
+        const b = FB.db.batch();
+        ids.slice(i, i + 400).forEach(id => b.delete(entryCol().doc(id)));
+        await b.commit();
+      }
+      await userRef().delete();
+    }catch(e){ saveErr(e); }
+  };
+}
+
+/* =========================================================
+   部品
+   ========================================================= */
+function openSheet(html){
+  const scrim = document.createElement('div'); scrim.className = 'scrim';
+  const sheet = document.createElement('div'); sheet.className = 'sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.innerHTML = '<div class="grip"></div>' + html;
+  const close = () => { scrim.remove(); sheet.remove(); };
+  scrim.onclick = close;
+  document.body.append(scrim, sheet);
+  return { scrim, sheet, close };
+}
+let toastTimer;
+function toast(msg){
+  document.querySelector('.toast')?.remove();
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 1800);
+}
+
+/* 日付が変わったら描き直す（開きっぱなし対策） */
+let shown = todayStr();
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden && shown !== todayStr()){ shown = todayStr(); render(); }
+});
+
+connect();
+render();
+})();
+</script>
+</body>
+</html>

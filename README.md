@@ -20,6 +20,7 @@
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
+| NEKO-ZUKAI | https://oceanhermit.github.io/my-tools/neko-zukai/ | おこづかい帳。Firebase（Google Auth / Firestore、専用プロジェクト `neko-zukai`）を利用 |
 | チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
 | ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
@@ -37,6 +38,11 @@ my-tools/
 │   └── index.html
 ├── kasanari/
 │   └── index.html
+├── neko-zukai/
+│   ├── index.html
+│   ├── cat.js            # ネコの絵（骨格から組み立てる SVG）
+│   ├── cat-sheet.html    # ネコの段階・骨格・パーツの確認ページ
+│   └── firestore.rules
 ├── chirashi-map/
 │   ├── index.html
 │   └── firestore.rules
@@ -353,3 +359,83 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 - **Overpass** は overpass-api.de → overpass.kumi.systems の順に試す。区域が 12km² を超えるときは
   単位を作らせない（先に分けてもらう）
 - 地図タイルは既定で**地理院タイル（淡色）**。標準地図・航空写真・OSM に切り替えられる
+
+
+---
+
+## NEKO-ZUKAI
+
+毎月自由に使えるお金を決めて、毎日使った分を記録するおこづかい帳。茶トラの家ネコが「〜にゃ」で話す。
+
+### 計算の決まり
+
+- 期間は **加算日〜次の加算日の前日**。加算日は設定で変えられる（既定 25日。29〜31日は短い月なら月末）
+- 加算日に毎月の額が足される。**余りは全額を次の期間へ繰り越す。マイナスも次の期間から差し引く**
+- 「今日つかえるお金」＝ 今朝の時点の今期の残り ÷ 次の加算日までの日数（今日を含む）− 今日使った額。
+  目安は朝の時点で固定なので、使っても今日の目安そのものは動かない。使いすぎた分は翌日以降の目安に響く
+- 設定の金額・加算日を変えても過去の期間は書き換えない（`configs` に変更日ごとの履歴を持つ）
+
+### 進め方
+
+1. 画面と計算
+2. 専用の Firebase プロジェクトで、Googleログインして複数端末に同期
+3. 連続記録とカレンダーのスタンプ
+4. 締めの振り返りと、貯まるほどネコの様子が変わる演出 ← いまここ（実機確認まち）
+
+### 連続記録とカレンダー
+
+- 記録（0円の「使わなかった日」も含む）が1件でもある日を「記録した日」とする
+- **あとから入れた日もつながる**。今日まだ記録していなくても、昨日までつながっていれば途切れない
+- カレンダーは肉球スタンプ。その日の朝の時点の目安と比べて 目安内（オレンジ）／使いすぎ（グレー）／
+  使わなかった（金色）。過去の日をタップすると、その日付で記録を入れられる
+
+### 貯まった額とネコの段階
+
+- **貯まった額** ＝ これまでに締めた期間の余りの合計（＝今期に繰り越された額）。使いすぎた期間はマイナスとして引く
+- ネコの段階は、毎月の額に対する貯まった額の割合で決まる
+
+| 段階 | 条件 | 見た目 |
+|---|---|---|
+| 0 ぼさぼさ | マイナス | 毛が乱れてくすみ、ねむい目でへの字口 |
+| 1 ふつう | 0円〜 | おすわり |
+| 2 毛づくろい | 10%〜 | 前足を持ち上げてなめる |
+| 3 にっこり | 50%〜 | 口を開けて笑う、きらきら |
+| 4 液体ネコ | 100%〜 | ガラスの金魚鉢にすっぽり |
+
+- その日の様子（記録した・使いすぎた）で表情だけ変わる（毛づくろいは除く）
+- 加算日のあとに初めて開いたとき、前の期間の振り返り（浮いた額・前の期間との差・段階の変化）を一度だけ出す。
+  出したかどうかは端末ごとに覚える。手元のキャッシュだけで数字を出さないよう、サーバーから記録が届いてから判断する
+- 「これまでの振り返り」で、期間ごとの 使った額・浮いた額・貯まった額 を一覧できる
+
+### ネコの絵（`cat.js`）
+
+ポーズごとに骨格（頭骨・首・肩・ひじ・手首・肋骨・骨盤・もも・かかと・しっぽの骨）の関節の位置を決め、
+関節の並びと関節ごとの太さから、からだ・足・しっぽの輪郭を作っている。ポーズを直すときは `SK` の関節の位置を動かす。
+輪郭のふちに細い毛を描き、表面はグラデーションとしま模様だけ。`cat-sheet.html` を開くと、
+5段階の絵・骨格を重ねた絵・ポーズごとのパーツを一覧で確かめられる。
+
+### 保存の仕組み
+
+専用プロジェクト **`neko-zukai`** を使う。Google ログイン必須（匿名ログインは使わない）。
+
+```
+users/{uid}                 catName / start / opening / configs
+users/{uid}/entries/{id}    date / amount / memo / at   （1件1文書）
+```
+
+- 読み書きできるのは本人の `users/{uid}` の下だけ。ルールは `neko-zukai/firestore.rules`
+  （キーの種類・型・金額が 0 以上かも確かめる）。**中身を Console の Firestore →「ルール」に貼る**
+- `onSnapshot` で購読しているので、別の端末で記録すると開いている画面にもすぐ出る
+- `enablePersistence` を入れてあるので、圏外でも記録でき、つながると送られる
+- 段階1でこの端末（localStorage `neko-zukai-v1`）に記録していた場合、ログイン後にクラウドが空なら
+  一度だけ自動で引き継ぐ。元のデータは `neko-zukai-v1-migrated` に残す
+
+Firebase Console 側で要る設定：
+
+1. Authentication → Sign-in method → **Google** を有効化（プロジェクトの公開名は `NEKO-ZUKAI`）
+2. Authentication → Settings → 承認済みドメイン に **`oceanhermit.github.io`** を追加
+3. Firestore を作成（東京 `asia-northeast1`・本番環境モード）し、ルールを貼る
+
+Firestore / Auth エミュレータで確認済み：段階1の記録の引き継ぎ、2端末で同じアカウントに入ったときの
+即時反映、初期設定の入力中に同期が届いても打ちかけが消えないこと、すべて消す。
+ルールは、他人の記録の読み書き・マイナスの金額・想定外のキー をいずれも拒否した。
