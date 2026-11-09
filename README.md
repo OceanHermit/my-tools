@@ -20,7 +20,7 @@
 | 教学でGo! | https://oceanhermit.github.io/my-tools/kyogaku-go/ | 単体で動作（外部依存は Google Fonts のみ） |
 | キズナかるた | https://oceanhermit.github.io/my-tools/kizuna-karuta/ | Firebase（Auth / Firestore / Storage）を利用 |
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
-| NEKO-ZUKAI | https://oceanhermit.github.io/my-tools/neko-zukai/ | おこづかい帳。段階1はこの端末の localStorage のみ（段階2で Firebase 同期の予定） |
+| NEKO-ZUKAI | https://oceanhermit.github.io/my-tools/neko-zukai/ | おこづかい帳。Firebase（Google Auth / Firestore、専用プロジェクト `neko-zukai`）を利用 |
 | チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
 | ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
@@ -39,7 +39,8 @@ my-tools/
 ├── kasanari/
 │   └── index.html
 ├── neko-zukai/
-│   └── index.html
+│   ├── index.html
+│   └── firestore.rules
 ├── chirashi-map/
 │   ├── index.html
 │   └── firestore.rules
@@ -374,7 +375,33 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 
 ### 進め方
 
-1. 画面と計算（この端末だけに保存） ← いまここ
-2. 専用の Firebase プロジェクトで、Googleログインして複数端末に同期
+1. 画面と計算
+2. 専用の Firebase プロジェクトで、Googleログインして複数端末に同期 ← いまここ
 3. 連続記録とカレンダーのスタンプ
 4. 締め日の振り返りと、貯金箱が育つ演出
+
+### 保存の仕組み
+
+専用プロジェクト **`neko-zukai`** を使う。Google ログイン必須（匿名ログインは使わない）。
+
+```
+users/{uid}                 catName / start / opening / configs
+users/{uid}/entries/{id}    date / amount / memo / at   （1件1文書）
+```
+
+- 読み書きできるのは本人の `users/{uid}` の下だけ。ルールは `neko-zukai/firestore.rules`
+  （キーの種類・型・金額が 0 以上かも確かめる）。**中身を Console の Firestore →「ルール」に貼る**
+- `onSnapshot` で購読しているので、別の端末で記録すると開いている画面にもすぐ出る
+- `enablePersistence` を入れてあるので、圏外でも記録でき、つながると送られる
+- 段階1でこの端末（localStorage `neko-zukai-v1`）に記録していた場合、ログイン後にクラウドが空なら
+  一度だけ自動で引き継ぐ。元のデータは `neko-zukai-v1-migrated` に残す
+
+Firebase Console 側で要る設定：
+
+1. Authentication → Sign-in method → **Google** を有効化（プロジェクトの公開名は `NEKO-ZUKAI`）
+2. Authentication → Settings → 承認済みドメイン に **`oceanhermit.github.io`** を追加
+3. Firestore を作成（東京 `asia-northeast1`・本番環境モード）し、ルールを貼る
+
+Firestore / Auth エミュレータで確認済み：段階1の記録の引き継ぎ、2端末で同じアカウントに入ったときの
+即時反映、初期設定の入力中に同期が届いても打ちかけが消えないこと、すべて消す。
+ルールは、他人の記録の読み書き・マイナスの金額・想定外のキー をいずれも拒否した。

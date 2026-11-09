@@ -157,9 +157,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 /* setup page */
 .setup{padding-top:24px}
 .setup .hello{text-align:center}
+.setup .cat{margin:0 auto}
 .setup .hello h1{font-size:22px;font-weight:900;letter-spacing:.08em;margin-top:4px}
 .setup .hello h1 span{color:var(--accent)}
 .setup .hello p{font-size:13.5px;color:var(--soft);margin-top:6px}
+
+/* login / account */
+.gbtn{
+  display:inline-flex;align-items:center;gap:10px;margin-top:22px;padding:13px 22px;border-radius:99px;
+  background:var(--paper);border:1.5px solid var(--line);font-size:16px;font-weight:700;box-shadow:0 3px 0 var(--line);
+}
+.gbtn:active{transform:translateY(2px);box-shadow:none}
+.acct{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:22px;padding-top:12px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--soft)}
+.acct span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct .btn{width:auto;flex:0 0 auto}
 
 /* toast */
 .toast{
@@ -212,18 +223,32 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 
 <div class="wrap" id="app"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
 <script>
 (() => {
 'use strict';
 
 /* =========================================================
-   保存（段階1はこの端末だけ。段階2で Firebase に差し替える）
+   保存（Firebase: Google ログイン + Firestore）
+
+   users/{uid}                 catName / start / opening / configs
+   users/{uid}/entries/{id}    date / amount / memo / at
+
+   自分の uid の下しか読み書きできない（firestore.rules）。
+   Firestore のオフライン保存を入れてあるので、圏外でも記録でき、つながると送られる。
    ========================================================= */
-const KEY = 'neko-zukai-v1';
-const store = {
-  load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || null; }catch(e){ return null; } },
-  save(d){ try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){ toast('保存できませんでした'); } },
+const firebaseConfig = {
+  apiKey: "AIzaSyCxsW8vcezsybApzAd73Pazgsi0zPGDqOE",
+  authDomain: "neko-zukai.firebaseapp.com",
+  projectId: "neko-zukai",
+  storageBucket: "neko-zukai.firebasestorage.app",
+  messagingSenderId: "432650311710",
+  appId: "1:432650311710:web:18495f9c6f8573800ab60f"
 };
+const LOCAL_KEY = 'neko-zukai-v1';   // 段階1でこの端末に保存していた記録（ログイン後に一度だけ引き継ぐ）
 
 /*
   data = {
@@ -234,7 +259,103 @@ const store = {
     entries: [{id, date:'YYYY-MM-DD', amount:500, memo:'', at:ms}],
   }
 */
-let data = store.load();
+let data = null;
+const FB = { state: 'loading', msg: '', user: null, db: null, profile: undefined, entries: null, unsub: [] };
+
+const userRef  = () => FB.db.collection('users').doc(FB.user.uid);
+const entryCol = () => userRef().collection('entries');
+const PROFILE_KEYS = ['catName','start','opening','configs'];
+const profileOf = d => Object.fromEntries(PROFILE_KEYS.map(k => [k, d[k]]));
+
+function fbMessage(e){
+  const c = e && e.code;
+  if(c === 'no-sdk') return 'ネットにつながらず、準備ができませんでした。通信を確かめて、開き直してください。';
+  if(c === 'permission-denied') return 'Firestore のルールで許可されていません。ルールが反映されているか確かめてください。';
+  if(c === 'auth/operation-not-allowed') return 'Firebase 側で Google ログインが有効になっていません。';
+  if(c === 'auth/unauthorized-domain') return 'このドメインが Firebase の「承認済みドメイン」に入っていません。';
+  if(c === 'unavailable' || c === 'auth/network-request-failed') return '通信が届きませんでした。電波を確かめて、もう一度お試しください。';
+  return 'うまくいきませんでした（' + (c || 'unknown') + '）。';
+}
+const saveErr = e => toast(fbMessage(e));
+
+/* snapshot が来るたびに data を組み立て直す */
+function rebuild(){
+  if(FB.profile === undefined || FB.entries === null){ data = null; return; }
+  data = FB.profile ? { ...FB.profile, entries: FB.entries } : null;
+}
+
+function connect(){
+  if(typeof firebase === 'undefined'){ FB.state = 'error'; FB.msg = fbMessage({ code:'no-sdk' }); render(); return; }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    FB.db = firebase.firestore();
+    FB.db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+  }catch(e){ FB.state = 'error'; FB.msg = fbMessage(e); render(); return; }
+
+  const auth = firebase.auth();
+  auth.getRedirectResult().catch(e => { if(e && e.code) toast(fbMessage(e)); });
+  auth.onAuthStateChanged(user => {
+    FB.unsub.forEach(f => f()); FB.unsub = [];
+    FB.user = user; FB.profile = undefined; FB.entries = null; data = null;
+    if(!user){ FB.state = 'signedout'; render(); return; }
+    FB.state = 'ready'; render();
+    const fail = e => { FB.state = 'error'; FB.msg = fbMessage(e); render(); };
+    FB.unsub.push(userRef().onSnapshot(s => {
+      FB.profile = s.exists ? s.data() : null;
+      if(!s.exists && !s.metadata.fromCache) migrateLocal();
+      rebuild(); render();
+    }, fail));
+    FB.unsub.push(entryCol().onSnapshot(s => {
+      FB.entries = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      rebuild(); render();
+    }, fail));
+  });
+}
+
+function googleProvider(){
+  const p = new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({ prompt: 'select_account' });
+  return p;
+}
+async function signIn(){
+  const auth = firebase.auth();
+  try{ await auth.signInWithPopup(googleProvider()); }
+  catch(e){
+    const c = e && e.code;
+    if(c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return;
+    if(c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-environment'){
+      try{ await auth.signInWithRedirect(googleProvider()); }catch(e2){ toast(fbMessage(e2)); }
+      return;
+    }
+    toast(fbMessage(e));
+  }
+}
+
+/* 段階1でこの端末に保存していた記録を、クラウドが空のときだけ引き継ぐ */
+let migrating = false;
+async function migrateLocal(){
+  if(migrating) return;
+  let local = null;
+  try{ local = JSON.parse(localStorage.getItem(LOCAL_KEY)); }catch(e){}
+  if(!local || !local.start) return;
+  migrating = true;
+  try{
+    const list = local.entries || [];
+    for(let i = 0; i < list.length; i += 400){
+      const b = FB.db.batch();
+      for(const e of list.slice(i, i + 400)){
+        const { id, ...rest } = e;
+        b.set(entryCol().doc(id), rest);
+      }
+      await b.commit();
+    }
+    await userRef().set(profileOf(local));
+    localStorage.setItem(LOCAL_KEY + '-migrated', localStorage.getItem(LOCAL_KEY));
+    localStorage.removeItem(LOCAL_KEY);
+    toast('この端末の記録を引き継いだにゃ');
+  }catch(e){ saveErr(e); }
+  migrating = false;
+}
 
 /* =========================================================
    日付
@@ -335,13 +456,23 @@ function moodOf(c){
    ========================================================= */
 const $app = document.getElementById('app');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let lastLine = null;   // 直前に言わせたいせりふ（記録した直後など）
+/* 直前に言わせたいせりふ（記録した直後など）。同期で描き直しても数秒は残す */
+let said = { text: '', until: 0 };
+const say = text => { said = { text, until: Date.now() + 4000 }; };
+/* 表情が変わらない間は、せりふを毎回くじ引きし直さない */
+let moodMemo = { face: '', line: '' };
 
 function render(){
-  if(!data){ renderSetup(); return; }
+  if(FB.state === 'loading') return renderMessage('準備しているにゃ…');
+  if(FB.state === 'error') return renderMessage(FB.msg, 'sad', true);
+  if(FB.state === 'signedout') return renderLogin();
+  if(FB.profile === undefined || FB.entries === null) return renderMessage('記録を読みこんでいるにゃ…');
+  // 初期設定の入力中は、同期が届いても描き直さない（打ちかけが消えるので）
+  if(!data){ if(!migrating && !$app.querySelector('#f-name')) renderSetup(); return; }
   const c = compute();
   const mood = moodOf(c);
-  const line = lastLine || mood.line; lastLine = null;
+  if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
+  const line = said.until > Date.now() ? said.text : moodMemo.line;
   const budget = c.cur.carry + c.cur.amount;
   const usedPct = budget > 0 ? Math.min(100, Math.max(0, c.remaining / budget * 100)) : 0;
 
@@ -397,7 +528,7 @@ function render(){
         </div>`;
       }).join('') : '<p class="empty">まだ記録がないにゃ</p>'}
     </section>
-    <p class="note">記録はこの端末の中だけに保存されています（段階1）</p>
+    <p class="note">記録は ${esc(FB.user.email || 'Google アカウント')} に保存されています</p>
   `;
 
   const slot = $app.querySelector('#cat-slot');
@@ -405,7 +536,7 @@ function render(){
   $app.querySelector('#open-entry').onclick = () => openEntry();
   $app.querySelector('#open-settings').onclick = openSettings;
   const z = $app.querySelector('#zero-day');
-  if(z) z.onclick = () => { addEntry({ date: c.today, amount: 0, memo: '' }); lastLine = pick(LINES.zero); render(); };
+  if(z) z.onclick = () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); };
   $app.querySelectorAll('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
 }
 
@@ -423,9 +554,18 @@ function makeCat(face){
    記録
    ========================================================= */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+/* 書き込むと Firestore の手元キャッシュがすぐ snapshot を返すので、描き直しはそちらに任せる */
 function addEntry(e){
-  data.entries.push({ id: uid(), at: Date.now(), ...e });
-  store.save(data);
+  entryCol().doc(uid()).set({ at: Date.now(), ...e }).catch(saveErr);
+}
+function updateEntry(id, patch){
+  entryCol().doc(id).update(patch).catch(saveErr);
+}
+function deleteEntry(id){
+  entryCol().doc(id).delete().catch(saveErr);
+}
+function saveProfile(p){
+  return userRef().set(p).catch(saveErr);
 }
 
 /* よく入れる「金額＋メモ」。2回以上入れたものを、回数 → 新しさの順に4つまで */
@@ -487,15 +627,14 @@ function openEntry(edit){
   $save.onclick = () => {
     const amount = Number(val || 0);
     const memo = sheet.querySelector('#memo').value.trim();
-    if(edit){ Object.assign(edit, { amount, memo, date }); store.save(data); toast('なおしたにゃ'); }
-    else { addEntry({ date, amount, memo }); lastLine = pick(LINES.saved); }
-    close(); render();
+    close();
+    if(edit){ updateEntry(edit.id, { amount, memo, date }); toast('なおしたにゃ'); }
+    else { say(pick(LINES.saved)); addEntry({ date, amount, memo }); }
   };
   const del = sheet.querySelector('#del');
   if(del) del.onclick = () => {
     if(!confirm('この記録を消しますか？')) return;
-    data.entries = data.entries.filter(e => e !== edit); store.save(data);
-    close(); render(); toast('消したにゃ');
+    close(); deleteEntry(edit.id); toast('消したにゃ');
   };
   paint();
 }
@@ -548,15 +687,40 @@ function renderSetup(){
     const f = readForm($app, true);
     if(f.err){ $app.querySelector('#f-err').textContent = f.err; return; }
     const start = ymd(periodStartOf(new Date(), f.payday));
-    data = {
+    say(`${f.name}だにゃ。よろしくにゃ！`);
+    $app.innerHTML = '';
+    saveProfile({
       catName: f.name, start, opening: f.opening,
       configs: [{ from: start, amount: f.amount, payday: f.payday }],
-      entries: [],
-    };
-    store.save(data);
-    lastLine = `${f.name}だにゃ。よろしくにゃ！`;
-    render();
+    });
   };
+}
+
+/* ネコと一言だけの画面（読みこみ中・エラー） */
+function renderMessage(msg, face = 'normal', retry = false){
+  $app.innerHTML = `
+    <div class="setup"><div class="hello">
+      <div id="cat-slot"></div>
+      <h1>NEKO<span>-</span>ZUKAI</h1>
+      <p>${esc(msg)}</p>
+      ${retry ? '<button class="btn" id="retry" style="margin-top:20px">開き直す</button>' : ''}
+    </div></div>`;
+  $app.querySelector('#cat-slot').replaceWith(makeCat(face));
+  const r = $app.querySelector('#retry'); if(r) r.onclick = () => location.reload();
+}
+
+const GLOGO = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 7-10.3 7-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+
+function renderLogin(){
+  $app.innerHTML = `
+    <div class="setup"><div class="hello">
+      <div id="cat-slot"></div>
+      <h1>NEKO<span>-</span>ZUKAI</h1>
+      <p>ログインすると、スマホでもパソコンでも<br>同じ記録を見られるにゃ</p>
+      <button class="gbtn" id="signin">${GLOGO}<span>Google でログイン</span></button>
+    </div></div>`;
+  $app.querySelector('#cat-slot').replaceWith(makeCat('normal'));
+  $app.querySelector('#signin').onclick = signIn;
 }
 
 function openSettings(){
@@ -566,22 +730,37 @@ function openSettings(){
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday })}
     <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日から反映されます。それまでの記録はそのままです。</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
-    <button class="btn ghost" id="s-reset" style="margin-top:18px;color:var(--minus)">すべての記録を消して最初から</button>
+    <div class="acct">
+      <span>${esc(FB.user.email || '')} でログイン中</span>
+      <button class="btn ghost" id="s-out">ログアウト</button>
+    </div>
+    <button class="btn ghost" id="s-reset" style="margin-top:6px;color:var(--minus)">すべての記録を消して最初から</button>
   `);
   sheet.querySelector('#s-save').onclick = () => {
     const f = readForm(sheet, false);
     if(f.err){ sheet.querySelector('#f-err').textContent = f.err; return; }
-    data.catName = f.name;
+    const p = profileOf(data);
+    p.catName = f.name;
     if(f.amount !== cfg.amount || f.payday !== cfg.payday){
       const t = todayStr();
-      data.configs = data.configs.filter(x => x.from !== t || x === data.configs[0]);
-      data.configs.push({ from: t, amount: f.amount, payday: f.payday });
+      p.configs = p.configs.filter(x => x.from !== t || x === p.configs[0]);
+      p.configs.push({ from: t, amount: f.amount, payday: f.payday });
     }
-    store.save(data); close(); render(); toast('保存したにゃ');
+    close(); saveProfile(p); toast('保存したにゃ');
   };
-  sheet.querySelector('#s-reset').onclick = () => {
-    if(!confirm('すべての記録と設定を消します。元に戻せません。よろしいですか？')) return;
-    localStorage.removeItem(KEY); data = null; close(); render();
+  sheet.querySelector('#s-out').onclick = () => { close(); firebase.auth().signOut().catch(saveErr); };
+  sheet.querySelector('#s-reset').onclick = async () => {
+    if(!confirm('すべての記録と設定を消します。ほかの端末からも消えて、元に戻せません。よろしいですか？')) return;
+    close();
+    try{
+      const ids = data.entries.map(e => e.id);
+      for(let i = 0; i < ids.length; i += 400){
+        const b = FB.db.batch();
+        ids.slice(i, i + 400).forEach(id => b.delete(entryCol().doc(id)));
+        await b.commit();
+      }
+      await userRef().delete();
+    }catch(e){ saveErr(e); }
   };
 }
 
@@ -612,6 +791,7 @@ document.addEventListener('visibilitychange', () => {
   if(!document.hidden && shown !== todayStr()){ shown = todayStr(); render(); }
 });
 
+connect();
 render();
 })();
 </script>
