@@ -158,8 +158,8 @@ function headEars(id, p, k){
 
 function headFace(id, p, k){
   const pts = blob(HEAD);
-  // ほお毛は長く、下・外へ流す。頭の上は短く
-  const lenAt = (nx, ny) => ny > 0 ? 1 + 2.2 * ny * (1 - Math.abs(ny) * .35) * (1 + Math.abs(nx)) : .55;
+  // 輪郭の毛は頭まわり全体で短くそろえる（ほおやあごを長くすると、あごひげに見えるため）
+  const lenAt = () => .55;
   return `<g class="part-head">
     ${edgeHair(pts, { col: p.mid, col2: p.light, len: 4 * k.hairLen, fall: .4, seed: 31, lenAt, jit: .45 * k.messy, op: .95 })}
     <path d="${pathOf(pts)}" fill="url(#${id}-head)"/>
