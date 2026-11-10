@@ -43,6 +43,7 @@ my-tools/
 │   ├── cat.js            # ネコの絵（線画スタイル。白とアプリコット）
 │   ├── cat-sheet.html    # ネコの5段階 × 2色の確認ページ
 │   ├── manifest.webmanifest  # ホーム画面に追加したときの名前・アイコン
+│   ├── widget/           # ウィジェット用のネコの PNG（5段階 × 2色）
 │   ├── icons/            # アイコン（液体ネコ。180 / 192 / 512 / maskable 512 / favicon 32）
 │   └── firestore.rules
 ├── chirashi-map/
@@ -425,12 +426,36 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 - `cat-sheet.html` を開くと、5段階 × 2色の絵を一覧で確かめられる
 - ホーム画面のアイコンは、アプリコットの液体ネコ
 
+### ホーム画面のウィジェット（iPhone・Scriptable）
+
+iPhone のウィジェットはネイティブアプリでないと作れないので、無料アプリ **Scriptable** を使う。小（2×2）サイズ。
+
+- 設定 →「ホーム画面のウィジェットを設定する」で、あなた専用の秘密の番号（24文字）を作り、
+  それを埋め込んだスクリプトをコピーできる。手順も画面に出る
+- アプリは記録が変わるたびに `widgets/{秘密の番号}` へまとめを書く。中身は
+  名前・毛色・段階・期間の開始日と終了日・日数・予算・今期に使った額・連続日数 だけ（記録の中身やメモは書かない）
+- ウィジェットは Firestore の REST API で、ログインなしで読む（ルールで「番号を知っていれば get できる・一覧は不可」にしてある）。
+  「今日つかえるお金 = その日までの日割りの合計 − 今期に使った額」をウィジェット側で計算するので、
+  アプリを開かない日が続いても数字は正しい（期間が終わったら「アプリを開いてね」と出す）
+- ネコの絵は `neko-zukai/widget/cat-{毛色}-{段階}.png` を読み、端末にも控える
+- 小サイズのウィジェットは押せる場所が全体で1つなので、押すと `#add` 付きでアプリを開き、記録の画面がすぐ出る。
+  iPhone の決まりで、ホーム画面に追加したアプリではなく Safari で開く（初回だけ Safari でもログインが要る）
+- 15分ごとに更新を頼むが、実際の間隔は iPhone が決める
+
+### 更新がすぐ反映されないとき
+
+GitHub Pages はファイルを最大10分キャッシュさせる（`cache-control: max-age=600`）。
+`cat.js`・アイコン・マニフェストは `index.html` から `?v=日付` 付きで読んでいるので、
+**これらを変えたら `index.html` と `manifest.webmanifest` の `v=` も書き換える**。
+`index.html` 自体は最大10分古いままのことがある。ホーム画面から開いている場合は、アプリを完全に閉じてから開き直す。
+
 ### 保存の仕組み
 
 専用プロジェクト **`neko-zukai`** を使う。Google ログイン必須（匿名ログインは使わない）。
 
 ```
-users/{uid}                 catName / catColor / start / opening / configs
+users/{uid}                 catName / catColor / widgetToken / start / opening / configs
+widgets/{秘密の番号}          ウィジェット用のまとめ（誰でも get できるが一覧は不可。書けるのは本人だけ）
 users/{uid}/entries/{id}    date / amount / memo / at   （1件1文書）
 ```
 
