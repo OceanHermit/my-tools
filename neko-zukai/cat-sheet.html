@@ -1,39 +1,27 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEKO-ZUKAI ネコのパーツ確認</title>
+<title>NEKO-ZUKAI ネコの確認</title>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
 body{margin:0;background:#FFF6E9;font-family:"Zen Maru Gothic",sans-serif;color:#5A3E2B}
 h1{font-size:18px;text-align:center;margin:20px 16px 4px}
-h2{font-size:15px;text-align:center;margin:28px 0 8px}
-h3{font-size:14px;text-align:center;margin:18px 0 6px;color:#9A7B62}
+h2{font-size:15px;text-align:center;margin:24px 0 8px}
+p.lead{text-align:center;font-size:13px;margin:0 16px 12px;color:#9A7B62}
 .grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 16px}
-.cell{width:220px;background:#fff;border:1.5px solid #EAD6BC;border-radius:14px;padding:6px;text-align:center;font-size:12px}
-.cell svg{width:208px;height:170px;display:block;margin:0 auto}
-.big .cell{width:250px}.big .cell svg{width:236px;height:226px}
-.big .cell b{display:block;font-size:14px}.big .cell small{color:#9A7B62}
+.cell{width:200px;background:#fff;border:1.5px solid #EAD6BC;border-radius:14px;padding:6px;text-align:center;font-size:13px}
+.cell svg{width:188px;height:180px;display:block;margin:0 auto}
+.cell small{display:block;color:#9A7B62}
 .twinkle{animation:tw 1.6s ease-in-out infinite}@keyframes tw{0%,100%{opacity:.25}50%{opacity:1}}
-.tail{transform-origin:150px 204px;animation:tail 3.2s ease-in-out infinite}@keyframes tail{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
-.lick-paw{transform-origin:142px 176px;animation:lick 1.1s ease-in-out infinite}@keyframes lick{0%,100%{transform:rotate(0)}50%{transform:rotate(4deg)}}
-.roll{transform-origin:146px 210px;animation:roll 2.6s ease-in-out infinite}@keyframes roll{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.2deg)}}
+.lick-paw{transform-origin:157px 156px;animation:lick 1.4s ease-in-out infinite}@keyframes lick{0%,100%{transform:rotate(0)}50%{transform:rotate(4deg)}}
 </style>
 <script src="cat.js"></script>
 </head><body>
-<h1>ネコ（詳細イラスト版・骨格から）</h1>
-<h2>組み立てたネコ（5段階）</h2>
-<div class="grid big" id="cats"></div>
-<h2>骨格を重ねたもの</h2>
-<div class="grid big" id="bones"></div>
-<h2>ポーズごとのパーツ</h2>
-<div id="parts"></div>
+<h1>NEKO-ZUKAI のネコ</h1>
+<p class="lead">貯まった額で段階が変わります（毛色は設定で白とアプリコットから選べます）</p>
+<div id="out"></div>
 <script>
-const L=[['0. ぼさぼさ','貯金がマイナス'],['1. ふつう','0円〜'],['2. 毛づくろい','毎月の額の10%〜'],['3. にっこり','50%〜'],['4. 液体ネコ','100%〜']];
-document.getElementById('cats').innerHTML=L.map((o,i)=>`<div class="cell">${nekoCat(i,'c'+i)}<b>${o[0]}</b><small>${o[1]}</small></div>`).join('');
-document.getElementById('bones').innerHTML=L.map((o,i)=>`<div class="cell">${nekoCat(i,'s'+i,{bones:true})}<b>${o[0]}</b></div>`).join('');
-let n=0;
-document.getElementById('parts').innerHTML=Object.entries(nekoParts).map(([g,names])=>`<h3>${g}</h3><div class="grid">${names.map(nm=>`<div class="cell" data-part>${nekoPart(g,nm,'p'+(n++),g==='液体ネコ'?4:g==='毛づくろい'?2:1)}${nm}</div>`).join('')}</div>`).join('');
-// パーツは描いた範囲に合わせて拡大
-document.querySelectorAll('[data-part] svg').forEach(s=>{let bb=null;for(const c of s.children){if(c.tagName==='defs'||c.tagName==='mask'||c.tagName==='clipPath')continue;const r=c.getBBox();if(!r.width)continue;const q={x:r.x,y:r.y,X:r.x+r.width,Y:r.y+r.height};bb=bb?{x:Math.min(bb.x,q.x),y:Math.min(bb.y,q.y),X:Math.max(bb.X,q.X),Y:Math.max(bb.Y,q.Y)}:q;}
- if(bb)s.setAttribute('viewBox',[bb.x-4,bb.y-4,bb.X-bb.x+8,bb.Y-bb.y+8].join(' '));});
+const L = [['0. ぼさぼさ','貯金がマイナス'],['1. ふつう','0円〜'],['2. 毛づくろい','毎月の額の10%〜'],['3. にっこり','50%〜'],['4. 液体ネコ','100%〜']];
+document.getElementById('out').innerHTML = [['white','白'],['apricot','アプリコット']].map(([c, n]) =>
+  `<h2>${n}</h2><div class="grid">${L.map((o, i) => `<div class="cell">${nekoCat(i, c + i, { color: c })}<b>${o[0]}</b><small>${o[1]}</small></div>`).join('')}</div>`).join('');
 </script>
 </body></html>
