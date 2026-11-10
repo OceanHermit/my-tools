@@ -175,6 +175,9 @@ function draw(cfg, id = 'b'){
   s += `<ellipse cx="118" cy="216" rx="${f1(84 * sx)}" ry="5" fill="#E5D3BD" opacity=".7"/>`;
   s += `<g transform="translate(${f1(112 * (1 - sx))} ${f1(212 * (1 - sy))}) scale(${sx} ${sy})">`;
   if(c.earType !== 'fold') s += `<g${hg}>${ears(c, id)}</g>`;
+  // 細いしっぽ・丸しっぽは体の後ろに置く（ふさふさのしっぽだけ体の前に沿わせる）
+  const tailBehind = c.tail === 'thin' || c.tail === 'bob';
+  if(tailBehind) s += tail(c, id);
   s += `<path d="${sil}" fill="${c.fur}"/>`;
   // 模様・白い胸とマズル
   s += `<g clip-path="url(#${id}-c)"><g${hg}>${pat.head}${c.muzzle ? `<ellipse cx="112" cy="105" rx="17" ry="12" fill="${c.muzzle}"/>` : ''}</g><g${bg}>${pat.body}` +
@@ -191,7 +194,7 @@ function draw(cfg, id = 'b'){
     s += `<path d="${sil}" fill="none" stroke="${c.line}" stroke-width="3.4" stroke-linecap="round" stroke-dasharray="72 8 58 8 96 8 46 8 88 8 64 8"/>`;
   }
   if(c.earType === 'fold') s += `<g${hg}>${ears(c, id)}</g>`;
-  s += tail(c, id);
+  if(!tailBehind) s += tail(c, id);
   [[99, 204], [125, 204]].forEach(([x, y]) => {
     s += `<g class="part-paw"><ellipse cx="${x}" cy="${y}" rx="11.5" ry="8" fill="${c.paw}" stroke="${c.line}" stroke-width="3.2"/>
       <path d="M${x - 3.8} ${y - 2}v5M${x + 3.8} ${y - 2}v5" stroke="${c.pawLine || c.chest}" stroke-width="2.2" stroke-linecap="round"/></g>`;
