@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261109b">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261109b">
-<link rel="manifest" href="manifest.webmanifest?v=20261109b">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261110a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261110a">
+<link rel="manifest" href="manifest.webmanifest?v=20261110a">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -66,9 +66,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .cat{width:230px;height:220px;display:block;cursor:pointer;transform-origin:50% 100%}
 .cat.bounce{animation:bounce .5s ease}
 @keyframes bounce{0%,100%{transform:scale(1,1)}30%{transform:scale(1.06,.94)}60%{transform:scale(.97,1.04)}}
-.cat .tail{transform-origin:148px 208px;animation:tail 3.2s ease-in-out infinite}
-@keyframes tail{0%,100%{transform:rotate(0)}50%{transform:rotate(-5deg)}}
-.cat .lick-paw{transform-origin:146px 158px;animation:lick 1.1s ease-in-out infinite}
+.cat .lick-paw{transform-origin:157px 156px;animation:lick 1.4s ease-in-out infinite}
 @keyframes lick{0%,100%{transform:rotate(0)}50%{transform:rotate(4deg)}}
 .cat .twinkle{animation:tw 1.6s ease-in-out infinite}
 @keyframes tw{0%,100%{opacity:.25}50%{opacity:1}}
@@ -88,6 +86,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 /* ---- review ---- */
 .review{text-align:center}
 .review .cat{margin:0 auto;width:200px;height:190px}
+
+/* ---- color pick ---- */
+.color-pick{margin-top:14px}
+.color-lbl{display:block;font-size:13.5px;font-weight:700}
+.color-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.color-opt{border:2px solid var(--line);background:var(--paper);border-radius:14px;padding:6px 6px 8px;display:flex;flex-direction:column;align-items:center;font-size:13px;font-weight:700;color:var(--soft)}
+.color-opt .cat{width:100%;height:auto;aspect-ratio:240/230;cursor:pointer}
+.color-opt.on{border-color:var(--accent);background:var(--cream);color:var(--ink)}
 .review .big{font-size:34px;font-weight:900;margin:2px 0}
 .review .big.minus{color:var(--minus)}
 .review p{font-size:14px;color:var(--soft);margin-top:4px}
@@ -253,7 +259,7 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261109b"></script>
+<script src="cat.js?v=20261110a"></script>
 
 <script>
 (() => {
@@ -774,13 +780,28 @@ function calendarHTML(c){
 
 /* ネコの絵（cat.js）。段階でポーズと毛並み、その日の様子で表情が変わる */
 const catCache = {};
+const COLOR_KEY = 'neko-zukai-color';
+const CAT_COLORS = [{ id: 'white', name: '白' }, { id: 'apricot', name: 'アプリコット' }];
+function catColor(){
+  const c = FB.profile && FB.profile.catColor;
+  if(c) return c;
+  try{ return localStorage.getItem(COLOR_KEY) || 'white'; }catch(e){ return 'white'; }
+}
+/* 毛色は設定とは別に保存する（ルールが古いままでも、ほかの設定の保存を巻き込まないため） */
+function saveColor(color){
+  try{ localStorage.setItem(COLOR_KEY, color); }catch(e){}
+  if(FB.user && FB.db) userRef().set({ catColor: color }, { merge: true }).catch(e => {
+    if(e && e.code === 'permission-denied') toast('毛色はこの端末にだけ保存したにゃ（Firestore のルールの更新が必要）');
+    else saveErr(e);
+  });
+}
 function faceOpt(lv, face){
   if(face === 'worried' || face === 'sad') return { eye: 'tired', mouth: 'frown' };
   if(face === 'happy') return lv === 0 ? { eye: 'tired', mouth: 'normal' } : lv === 3 ? {} : { eye: 'happy', mouth: 'normal' };
   return {};
 }
-function makeCat(lv = 1, face = 'normal', key = 'nk'){
-  const opt = faceOpt(lv, face), ck = `${key}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
+function makeCat(lv = 1, face = 'normal', key = 'nk', color = catColor()){
+  const opt = { ...faceOpt(lv, face), color }, ck = `${key}-${color}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
   if(!catCache[ck]) catCache[ck] = window.nekoCat ? nekoCat(lv, ck, opt) : '<svg class="cat" viewBox="0 0 240 230"></svg>';
   const box = document.createElement('div'); box.innerHTML = catCache[ck];
   const svg = box.firstElementChild;
@@ -806,7 +827,8 @@ function deleteEntry(id){
   entryCol().doc(id).delete().catch(saveErr);
 }
 function saveProfile(p){
-  return userRef().set(p).catch(saveErr);
+  // merge: 毛色（catColor）など、ここで渡さない項目を消さないため
+  return userRef().set(p, { merge: true }).catch(saveErr);
 }
 
 /* よく入れる「金額＋メモ」。2回以上入れたものを、回数 → 新しさの順に4つまで */
@@ -887,6 +909,11 @@ function settingsForm(v){
   return `
     <div class="form">
       <label>ネコの名前<input class="field" id="f-name" maxlength="12" value="${esc(v.catName)}" placeholder="例: ミケ"></label>
+      <div class="color-pick" role="radiogroup" aria-label="ネコの毛色">
+        <span class="color-lbl">ネコの毛色</span>
+        <div class="color-opts">${CAT_COLORS.map(c => `<button type="button" class="color-opt ${c.id === v.color ? 'on' : ''}" data-color="${c.id}" role="radio" aria-checked="${c.id === v.color}">
+          <span class="color-cat" data-cat="${c.id}"></span><span>${c.name}</span></button>`).join('')}</div>
+      </div>
       <label>毎月自由に使えるお金
         <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${v.amount || ''}" placeholder="30000"></div>
       </label>
@@ -908,7 +935,8 @@ function readForm(root, setup){
   if(setup){ const o = root.querySelector('#f-opening').value; if(o.trim() !== '') opening = n(o); }
   if(!name) return { err: 'ネコの名前を入れてほしいにゃ' };
   if(!amount) return { err: '毎月の金額を入れてほしいにゃ' };
-  return { name, amount, payday, opening };
+  const color = (root.querySelector('.color-opt.on') || {}).dataset?.color || 'white';
+  return { name, amount, payday, opening, color };
 }
 
 function renderSetup(){
@@ -919,21 +947,24 @@ function renderSetup(){
         <h1>NEKO<span>-</span>ZUKAI</h1>
         <p>はじめまして。まずは名前をつけてほしいにゃ</p>
       </div>
-      <div class="card">${settingsForm({ catName:'', amount:'', payday:25, setup:true })}
+      <div class="card">${settingsForm({ catName:'', amount:'', payday:25, setup:true, color: catColor() })}
         <button class="btn" id="start" style="margin-top:6px">はじめる</button>
       </div>
     </div>`;
   $app.querySelector('#cat-slot').replaceWith(makeCat(1, 'normal'));
+  bindColorPick($app, color => $app.querySelector('.hello .cat').replaceWith(makeCat(1, 'normal', 'nk', color)));
   $app.querySelector('#start').onclick = () => {
     const f = readForm($app, true);
     if(f.err){ $app.querySelector('#f-err').textContent = f.err; return; }
     const start = ymd(periodStartOf(new Date(), f.payday));
     say(`${f.name}だにゃ。よろしくにゃ！`);
     $app.innerHTML = '';
+    try{ localStorage.setItem(COLOR_KEY, f.color); }catch(e){}
+    // 毛色だけの書き込みは、設定の文書ができてから（ルールが名前などを必須にしているため）
     saveProfile({
       catName: f.name, start, opening: f.opening,
       configs: [{ from: start, amount: f.amount, payday: f.payday }],
-    });
+    }).then(() => saveColor(f.color));
   };
 }
 
@@ -968,7 +999,7 @@ function openSettings(){
   const cfg = configAt(todayStr());
   const { sheet, close } = openSheet(`
     <h3>設定</h3>
-    ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday })}
+    ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
     <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日から反映されます。それまでの記録はそのままです。</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
     <div class="acct">
@@ -977,8 +1008,10 @@ function openSettings(){
     </div>
     <button class="btn ghost" id="s-reset" style="margin-top:6px;color:var(--minus)">すべての記録を消して最初から</button>
   `);
+  bindColorPick(sheet);
   sheet.querySelector('#s-save').onclick = () => {
     const f = readForm(sheet, false);
+    if(!f.err && f.color !== catColor()) saveColor(f.color);
     if(f.err){ sheet.querySelector('#f-err').textContent = f.err; return; }
     const p = profileOf(data);
     p.catName = f.name;
@@ -1003,6 +1036,15 @@ function openSettings(){
       await userRef().delete();
     }catch(e){ saveErr(e); }
   };
+}
+
+/* 毛色の見本を描き、押したら選び直せるようにする（onPick で見本の外のネコも描き直せる） */
+function bindColorPick(root, onPick){
+  root.querySelectorAll('.color-cat').forEach(el => el.replaceWith(makeCat(1, 'normal', 'pick', el.dataset.cat)));
+  root.querySelectorAll('.color-opt').forEach(b => b.onclick = () => {
+    root.querySelectorAll('.color-opt').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
+    if(onPick) onPick(b.dataset.color);
+  });
 }
 
 /* =========================================================
