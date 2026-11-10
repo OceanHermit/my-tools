@@ -14,10 +14,11 @@ p.lead{text-align:center;font-size:13px;margin:0 16px 12px;color:#9A7B62}
 <script src="breeds.js"></script>
 </head><body>
 <h1>NEKO-ZUKAI 品種のネコ</h1>
-<p class="lead">追加コンテンツ用の素材です。同じ絵が <code>品種のid.svg</code> としてこのフォルダにあります。</p>
+<p class="lead">プレゼントで手に入る品種です。段階: <a href="?lv=0">ぼさぼさ</a>・<a href="?lv=1">ふつう</a>・<a href="?lv=2">毛づくろい</a>・<a href="?lv=3">にっこり</a>・<a href="?lv=4">液体ネコ</a></p>
 <div id="out"></div>
 <script>
+const LV = Number(new URLSearchParams(location.search).get('lv') ?? 1);
 const groups = [...new Set(nekoBreeds.map(b => b.group))];
-document.getElementById('out').innerHTML = groups.map(g => `<h2>${g}</h2><div class="grid">${nekoBreeds.filter(b => b.group === g).map(b => `<div class="cell">${nekoBreed(b.id)}${b.name}</div>`).join('')}</div>`).join('');
+document.getElementById('out').innerHTML = groups.map(g => `<h2>${g}</h2><div class="grid">${nekoBreeds.filter(b => b.group === g).map(b => `<div class="cell">${nekoBreed(b.id, b.id + LV, LV)}${b.name}</div>`).join('')}</div>`).join('');
 </script>
 </body></html>

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-10",
+  "updated": "2026-11-11",
   "tools": [
     {
       "id": "t12",
@@ -9,8 +9,9 @@
       "progress": 85,
       "url": "./neko-zukai/",
       "next": [
-        "Firestore のルールに毛色（catColor）を足したものを Console に貼る",
-        "スマホで毛色の切り替えと、ほかの端末への反映を確かめる"
+        "Firestore のルール（breeds・giftPeriod・widgets）を Console に貼る",
+        "加算日に液体ネコで締めて、プレゼントが届くか実機で確かめる",
+        "ウィジェットを実機の Scriptable で確かめる"
       ],
       "links": [
         {
@@ -18,7 +19,7 @@
           "url": "https://console.firebase.google.com/project/neko-zukai"
         }
       ],
-      "updated": "2026-11-10"
+      "updated": "2026-11-11"
     },
     {
       "id": "t11",
