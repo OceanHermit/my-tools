@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261110a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261110a">
-<link rel="manifest" href="manifest.webmanifest?v=20261110a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261110b">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261110b">
+<link rel="manifest" href="manifest.webmanifest?v=20261110b">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -88,6 +88,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .review .cat{margin:0 auto;width:200px;height:190px}
 
 /* ---- color pick ---- */
+.steps{margin:0 0 14px;padding-left:20px;font-size:13.5px;line-height:1.7}
+.steps li{margin-bottom:4px}
 .color-pick{margin-top:14px}
 .color-lbl{display:block;font-size:13.5px;font-weight:700}
 .color-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
@@ -261,7 +263,7 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261110a"></script>
+<script src="cat.js?v=20261110b"></script>
 
 <script>
 (() => {
@@ -469,7 +471,7 @@ function compute(){
   const todayLeft = base - spentToday;
 
   return {
-    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft, share, carryDay,
+    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft, share, carryDay, plan,
     next: ymd(next), recordedToday: data.entries.some(e => e.date === today),
     stamps: stampsOf(all, spentBy, today, firstDay),
     ...growthOf(cur.carry, periods.length, cfgNow.amount), monthly: cfgNow.amount,
@@ -530,6 +532,7 @@ function dayPlan(p, from){
   const total = Math.round((parse(p.end) - parse(start)) / 864e5) + 1;
   const budget = p.carry + p.amount;
   return {
+    start, total, budget,
     through(s){
       if(s < start) return 0;
       const k = Math.min(total, Math.round((parse(s) - parse(start)) / 864e5) + 1);
@@ -693,6 +696,8 @@ function render(){
   $app.querySelectorAll('.cal-nav').forEach(b => b.onclick = () => { calMonth = b.dataset.m; render(); });
   const h = $app.querySelector('#open-history'); if(h) h.onclick = () => openHistory(c);
   maybeReview(c);
+  syncWidget(c);
+  maybeOpenAdd();
 }
 
 /* =========================================================
@@ -1004,6 +1009,7 @@ function openSettings(){
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
     <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日から反映されます。それまでの記録はそのままです。</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
+    <button class="btn ghost" id="s-widget" style="margin-top:14px">ホーム画面のウィジェットを設定する</button>
     <div class="acct">
       <span>${esc(FB.user.email || '')} でログイン中</span>
       <button class="btn ghost" id="s-out">ログアウト</button>
@@ -1024,6 +1030,7 @@ function openSettings(){
     }
     close(); saveProfile(p); toast('保存したにゃ');
   };
+  sheet.querySelector('#s-widget').onclick = () => { close(); openWidgetSetup(); };
   sheet.querySelector('#s-out').onclick = () => { close(); firebase.auth().signOut().catch(saveErr); };
   sheet.querySelector('#s-reset').onclick = async () => {
     if(!confirm('すべての記録と設定を消します。ほかの端末からも消えて、元に戻せません。よろしいですか？')) return;
@@ -1035,6 +1042,7 @@ function openSettings(){
         ids.slice(i, i + 400).forEach(id => b.delete(entryCol().doc(id)));
         await b.commit();
       }
+      if(widgetToken()) await FB.db.collection('widgets').doc(widgetToken()).delete();
       await userRef().delete();
     }catch(e){ saveErr(e); }
   };
@@ -1047,6 +1055,142 @@ function bindColorPick(root, onPick){
     root.querySelectorAll('.color-opt').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); });
     if(onPick) onPick(b.dataset.color);
   });
+}
+
+/* =========================================================
+   ウィジェット（Scriptable）
+   ・設定でリンクを作ると、widgets/{秘密の番号} にまとめを置く。誰でも読めるが、番号を知らないと見つけられない
+   ・まとめには、日割りを計算し直せる数字だけを入れる（記録の中身やメモは入れない）
+     今日つかえるお金 = through(今日) − spent。アプリを開かない日が続いても、ウィジェット側で正しく計算できる
+   ========================================================= */
+let widgetLast = '';
+const widgetToken = () => FB.profile && FB.profile.widgetToken;
+function widgetData(c){
+  return {
+    uid: FB.user.uid, catName: data.catName, color: catColor(), level: c.level,
+    start: c.plan.start, end: c.cur.end, total: c.plan.total, budget: c.plan.budget, spent: c.cur.spent,
+    streak: c.streak, updated: c.today,
+  };
+}
+function syncWidget(c){
+  const t = widgetToken();
+  if(!t || !FB.profileLive || !FB.entriesLive) return;
+  const d = widgetData(c), key = JSON.stringify(d);
+  if(key === widgetLast) return;
+  widgetLast = key;
+  FB.db.collection('widgets').doc(t).set(d).catch(e => { widgetLast = ''; if(e && e.code !== 'permission-denied') saveErr(e); });
+}
+function newToken(){
+  const a = new Uint8Array(24); crypto.getRandomValues(a);
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  return Array.from(a, x => abc[x % abc.length]).join('');
+}
+function widgetScript(token){
+  return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う
+const TOKEN = "${token}";
+const KEY = "${firebaseConfig.apiKey}";
+const BASE = "https://oceanhermit.github.io/my-tools/neko-zukai/";
+const DOC = "https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/widgets/" + TOKEN + "?key=" + KEY;
+
+const C = { bg: new Color("#FFF6E9"), ink: new Color("#5A3E2B"), soft: new Color("#9A7B62"), minus: new Color("#C8553D"), accent: new Color("#E08A3C") };
+const yen = n => (n < 0 ? "−" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const day = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+
+async function load(){
+  try{
+    const j = await new Request(DOC).loadJSON();
+    if(!j.fields) return null;
+    const o = {};
+    for(const [k, v] of Object.entries(j.fields)) o[k] = v.stringValue ?? Number(v.integerValue ?? v.doubleValue);
+    return o;
+  }catch(e){ return null; }
+}
+async function catImage(d){
+  const fm = FileManager.local(), path = fm.joinPath(fm.cacheDirectory(), "neko-" + d.color + "-" + d.level + ".png");
+  try{ const img = await new Request(BASE + "widget/cat-" + d.color + "-" + d.level + ".png").loadImage(); fm.writeImage(path, img); return img; }
+  catch(e){ return fm.fileExists(path) ? fm.readImage(path) : null; }
+}
+
+const d = await load();
+const w = new ListWidget();
+w.backgroundColor = C.bg;
+w.setPadding(12, 12, 10, 12);
+w.url = BASE + "#add";
+w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
+
+if(!d){
+  const t = w.addText("NEKO-ZUKAI"); t.font = Font.boldRoundedSystemFont(14); t.textColor = C.ink;
+  w.addSpacer(6);
+  const m = w.addText("読みこめなかったにゃ。電波を確かめてね"); m.font = Font.systemFont(11); m.textColor = C.soft;
+}else{
+  const today = ymd(new Date());
+  const through = s => s < d.start ? 0 : Math.floor(d.budget * Math.min(d.total, Math.round((day(s) - day(d.start)) / 864e5) + 1) / d.total);
+  const top = w.addStack(); top.layoutHorizontally(); top.centerAlignContent();
+  const left = top.addStack(); left.layoutVertically();
+  const lbl = left.addText("今日つかえる"); lbl.font = Font.mediumRoundedSystemFont(11); lbl.textColor = C.soft;
+  top.addSpacer();
+  const img = await catImage(d);
+  if(img){ const im = top.addImage(img); im.imageSize = new Size(58, 56); }
+  w.addSpacer(2);
+  if(today > d.end){
+    const a = w.addText("加算日だにゃ"); a.font = Font.boldRoundedSystemFont(18); a.textColor = C.ink;
+    const b = w.addText("アプリを開いてね"); b.font = Font.systemFont(11); b.textColor = C.soft;
+  }else{
+    const left2 = through(today) - d.spent;
+    const a = w.addText(yen(left2)); a.font = Font.boldRoundedSystemFont(26); a.textColor = left2 < 0 ? C.minus : C.ink; a.minimumScaleFactor = .6; a.lineLimit = 1;
+    const b = w.addText("今期の残り " + yen(d.budget - d.spent)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
+  }
+  w.addSpacer();
+  const btn = w.addStack(); btn.backgroundColor = C.accent; btn.cornerRadius = 12; btn.setPadding(6, 10, 6, 10); btn.centerAlignContent();
+  btn.addSpacer();
+  const bt = btn.addText("＋ 記録する"); bt.font = Font.boldRoundedSystemFont(13); bt.textColor = Color.white();
+  btn.addSpacer();
+}
+if(config.runsInWidget) Script.setWidget(w); else await w.presentSmall();
+Script.complete();
+`;
+}
+async function openWidgetSetup(){
+  let t = widgetToken();
+  if(!t){
+    t = newToken();
+    try{ await userRef().set({ widgetToken: t }, { merge: true }); }
+    catch(e){ toast(e && e.code === 'permission-denied' ? 'Firestore のルールの更新が必要だにゃ' : fbMessage(e)); return; }
+    FB.profile = { ...(FB.profile || {}), widgetToken: t };
+    widgetLast = ''; syncWidget(compute());
+  }
+  const script = widgetScript(t);
+  const { sheet } = openSheet(`
+    <h3>ホーム画面のウィジェット</h3>
+    <ol class="steps">
+      <li>App Store で「Scriptable」（無料）を入れる</li>
+      <li>下のボタンでスクリプトをコピーする</li>
+      <li>Scriptable を開き、右上の「＋」→ 貼り付け → 上の名前を「NEKO-ZUKAI」にする</li>
+      <li>ホーム画面を長押し →「＋」→ Scriptable → いちばん小さいサイズを追加</li>
+      <li>追加したウィジェットを長押し →「ウィジェットを編集」→ Script で「NEKO-ZUKAI」を選ぶ</li>
+    </ol>
+    <button class="btn" id="w-copy">スクリプトをコピー</button>
+    <p class="note" style="text-align:left">ウィジェットを押すと、Safari で記録の画面が開くにゃ。はじめて開くときだけ、Safari でもログインしてね。<br>
+      スクリプトには、あなた専用の秘密の番号が入っているので、ほかの人に渡さないでね。</p>`);
+  sheet.querySelector('#w-copy').onclick = async () => {
+    try{ await navigator.clipboard.writeText(script); toast('コピーしたにゃ'); }
+    catch(e){
+      const ta = document.createElement('textarea'); ta.value = script; sheet.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); toast('コピーしたにゃ'); }catch(e2){ toast('コピーできなかったにゃ'); }
+      ta.remove();
+    }
+  };
+}
+/* ウィジェットから開いたとき（#add）は、記録の画面をすぐ出す */
+let addHandled = false;
+window.addEventListener('hashchange', () => { if(location.hash === '#add'){ addHandled = false; if(data) maybeOpenAdd(); } });
+function maybeOpenAdd(){
+  if(addHandled || location.hash !== '#add' || document.querySelector('.sheet')) return;
+  addHandled = true;
+  history.replaceState(null, '', location.pathname + location.search);
+  openEntry();
 }
 
 /* =========================================================
