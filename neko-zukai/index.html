@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261110b">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261110b">
-<link rel="manifest" href="manifest.webmanifest?v=20261110b">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261111a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261111a">
+<link rel="manifest" href="manifest.webmanifest?v=20261111a">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -95,10 +95,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .color-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
 .color-opt{border:2px solid var(--line);background:var(--paper);border-radius:14px;padding:6px 6px 8px;display:flex;flex-direction:column;align-items:center;font-size:13px;font-weight:700;color:var(--soft)}
 .color-opt .cat{width:100%;height:auto;aspect-ratio:240/230;cursor:pointer}
+.color-lbl small{font-weight:500;color:var(--soft);margin-left:8px;font-size:12px}
+.color-opts.many{grid-template-columns:repeat(3,1fr);gap:6px}
+.color-opts.many .color-opt{font-size:11px;padding:4px 2px 6px;line-height:1.3}
 .color-opt.on{border-color:var(--accent);background:var(--cream);color:var(--ink)}
 .review .big{font-size:34px;font-weight:900;margin:2px 0}
 .review .big.minus{color:var(--minus)}
 .review p{font-size:14px;color:var(--soft);margin-top:4px}
+.gift-box{border:0;background:transparent;padding:0;animation:wiggle 1.2s ease-in-out infinite}
+@keyframes wiggle{0%,100%{transform:rotate(0)}20%{transform:rotate(-5deg)}40%{transform:rotate(5deg)}60%{transform:rotate(-3deg)}80%{transform:rotate(3deg)}}
+.cat.pop{animation:pop .5s ease}
+@keyframes pop{0%{transform:scale(.3);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
 .review .up{display:inline-block;margin-top:10px;background:var(--cream);border-radius:99px;padding:6px 14px;font-size:14px;font-weight:700;color:var(--accent-dark)}
 .hist{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
 .hist th{font-weight:500;color:var(--soft);font-size:12px;text-align:right;padding:4px 2px;border-bottom:1px dashed var(--line)}
@@ -263,7 +270,8 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261110b"></script>
+<script src="cat.js?v=20261111a"></script>
+<script src="breeds/breeds.js?v=20261111a"></script>
 
 <script>
 (() => {
@@ -340,13 +348,13 @@ function connect(){
     const fail = e => { FB.state = 'error'; FB.msg = fbMessage(e); render(); };
     FB.unsub.push(userRef().onSnapshot({ includeMetadataChanges: true }, s => {
       FB.profile = s.exists ? s.data() : null;
-      FB.profileLive = !s.metadata.fromCache;
+      FB.profileLive = !s.metadata.fromCache && !s.metadata.hasPendingWrites;   // 書き込みの途中の状態では判定しない
       if(!s.exists && !s.metadata.fromCache) migrateLocal();
       rebuild(); render();
     }, fail));
     FB.unsub.push(entryCol().onSnapshot({ includeMetadataChanges: true }, s => {
       FB.entries = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      FB.entriesLive = !s.metadata.fromCache;
+      FB.entriesLive = !s.metadata.fromCache && !s.metadata.hasPendingWrites;
       rebuild(); render();
     }, fail));
   });
@@ -697,6 +705,7 @@ function render(){
   const h = $app.querySelector('#open-history'); if(h) h.onclick = () => openHistory(c);
   maybeReview(c);
   syncWidget(c);
+  maybeGift(c);
   maybeOpenAdd();
 }
 
@@ -730,7 +739,63 @@ function maybeReview(c){
       <button class="btn" id="rv-ok" style="margin-top:18px">${surplus >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
     </div>`);
   sheet.querySelector('#rv-cat').replaceWith(makeCat(c.level, surplus >= 0 ? 'happy' : 'worried', 'rv'));
-  sheet.querySelector('#rv-ok').onclick = close;
+  sheet.querySelector('#rv-ok').onclick = () => { close(); maybeGift(c); };
+}
+
+/* =========================================================
+   プレゼント
+   期間を締めたとき液体ネコ（段階4）なら、まだ持っていない品種を1つもらえる。
+   もらったかどうかはアカウントに記録する（giftPeriod = もらった期間の開始日）ので、端末が違っても1期間に1回だけ
+   ========================================================= */
+let giftBusy = false;
+function giftReady(c){
+  if(!FB.profileLive || !FB.entriesLive || !c.periods.length || c.level !== 4) return false;
+  if(FB.profile.giftPeriod === c.cur.start) return false;
+  return allBreeds().length > ownedBreeds().length;
+}
+function maybeGift(c){
+  if(giftBusy || document.querySelector('.sheet') || !giftReady(c)) return;
+  const { sheet, close } = openSheet(`
+    <div class="review gift">
+      <p>液体ネコのまま期間を終えたごほうびだにゃ</p>
+      <button class="gift-box" id="gift-open" aria-label="プレゼントを開ける">
+        <svg viewBox="0 0 120 120" width="150" height="150"><rect x="18" y="52" width="84" height="56" rx="8" fill="#F3B76C" stroke="#5A3E2B" stroke-width="4"/>
+          <rect x="12" y="34" width="96" height="24" rx="8" fill="#F6C98C" stroke="#5A3E2B" stroke-width="4"/>
+          <rect x="52" y="34" width="16" height="74" fill="#E0694F" stroke="#5A3E2B" stroke-width="4"/>
+          <path d="M60 34 C44 8 22 18 34 30 Q46 38 60 34 C76 8 98 18 86 30 Q74 38 60 34 Z" fill="#E0694F" stroke="#5A3E2B" stroke-width="4" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="big" style="font-size:22px">プレゼントがとどいたにゃ！</div>
+      <p>箱を押して開けてね</p>
+    </div>`);
+  sheet.querySelector('#gift-open').onclick = async () => {
+    if(giftBusy) return; giftBusy = true;
+    let got = null;
+    try{
+      // 2つの端末で同時に開けても1つだけになるよう、トランザクションで確かめてから書く
+      got = await FB.db.runTransaction(async tx => {
+        const snap = await tx.get(userRef()), p = snap.data() || {};
+        if(p.giftPeriod === c.cur.start) return null;
+        const owned = p.breeds || [], rest = allBreeds().filter(b => !owned.includes(b.id));
+        if(!rest.length) return null;
+        const pick = rest[Math.floor(Math.random() * rest.length)];
+        tx.set(userRef(), { breeds: [...owned, pick.id], giftPeriod: c.cur.start }, { merge: true });
+        return pick;
+      });
+    }catch(e){ giftBusy = false; toast(e && e.code === 'permission-denied' ? 'Firestore のルールの更新が必要だにゃ' : fbMessage(e)); return; }
+    giftBusy = false;
+    if(!got){ close(); return; }
+    FB.profile = { ...FB.profile, breeds: [...(FB.profile.breeds || []), got.id], giftPeriod: c.cur.start };
+    const box = sheet.querySelector('.gift');
+    box.innerHTML = `<p>あたらしいネコが来たにゃ！</p><div id="gift-cat"></div>
+      <div class="big" style="font-size:22px">${esc(got.name)}</div>
+      <p>${got.group}・あと ${allBreeds().length - ownedBreeds().length} 種類</p>
+      <button class="btn" id="gift-use" style="margin-top:16px">このネコにする</button>
+      <button class="btn ghost" id="gift-later">あとで設定から変える</button>`;
+    const cat = makeCat(3, 'happy', 'gift', got.id); cat.classList.add('pop');
+    box.querySelector('#gift-cat').replaceWith(cat);
+    box.querySelector('#gift-use').onclick = () => { close(); saveColor(got.id); FB.profile = { ...FB.profile, catColor: got.id }; say('すがたが変わったにゃ！'); render(); };
+    box.querySelector('#gift-later').onclick = close;
+  };
 }
 
 /* これまでの期間の一覧 */
@@ -788,7 +853,11 @@ function calendarHTML(c){
 /* ネコの絵（cat.js）。段階でポーズと毛並み、その日の様子で表情が変わる */
 const catCache = {};
 const COLOR_KEY = 'neko-zukai-color';
-const CAT_COLORS = [{ id: 'white', name: '白' }, { id: 'apricot', name: 'アプリコット' }];
+const BASE_KINDS = [{ id: 'white', name: '白' }, { id: 'apricot', name: 'アプリコット' }];
+const allBreeds = () => window.nekoBreeds || [];
+const ownedBreeds = () => { const o = (FB.profile && FB.profile.breeds) || []; return allBreeds().filter(b => o.includes(b.id)); };
+const catKinds = () => [...BASE_KINDS, ...ownedBreeds()];
+const isBreed = id => allBreeds().some(b => b.id === id);
 function catColor(){
   const c = FB.profile && FB.profile.catColor;
   if(c) return c;
@@ -809,7 +878,7 @@ function faceOpt(lv, face){
 }
 function makeCat(lv = 1, face = 'normal', key = 'nk', color = catColor()){
   const opt = { ...faceOpt(lv, face), color }, ck = `${key}-${color}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
-  if(!catCache[ck]) catCache[ck] = window.nekoCat ? nekoCat(lv, ck, opt) : '<svg class="cat" viewBox="0 0 240 230"></svg>';
+  if(!catCache[ck]) catCache[ck] = isBreed(color) ? nekoBreed(color, ck, lv, opt) : window.nekoCat ? nekoCat(lv, ck, opt) : '<svg class="cat" viewBox="0 0 240 230"></svg>';
   const box = document.createElement('div'); box.innerHTML = catCache[ck];
   const svg = box.firstElementChild;
   svg.addEventListener('click', () => {
@@ -916,9 +985,9 @@ function settingsForm(v){
   return `
     <div class="form">
       <label>ネコの名前<input class="field" id="f-name" maxlength="12" value="${esc(v.catName)}" placeholder="例: ミケ"></label>
-      <div class="color-pick" role="radiogroup" aria-label="ネコの毛色">
-        <span class="color-lbl">ネコの毛色</span>
-        <div class="color-opts">${CAT_COLORS.map(c => `<button type="button" class="color-opt ${c.id === v.color ? 'on' : ''}" data-color="${c.id}" role="radio" aria-checked="${c.id === v.color}">
+      <div class="color-pick" role="radiogroup" aria-label="ネコの種類">
+        <span class="color-lbl">ネコの種類${allBreeds().length ? `<small>プレゼントで ${ownedBreeds().length} / ${allBreeds().length} 種類</small>` : ''}</span>
+        <div class="color-opts ${catKinds().length > 2 ? 'many' : ''}">${catKinds().map(c => `<button type="button" class="color-opt ${c.id === v.color ? 'on' : ''}" data-color="${c.id}" role="radio" aria-checked="${c.id === v.color}">
           <span class="color-cat" data-cat="${c.id}"></span><span>${c.name}</span></button>`).join('')}</div>
       </div>
       <label>毎月自由に使えるお金

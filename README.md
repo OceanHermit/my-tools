@@ -43,7 +43,8 @@ my-tools/
 │   ├── cat.js            # ネコの絵（線画スタイル。白とアプリコット）
 │   ├── cat-sheet.html    # ネコの5段階 × 2色の確認ページ
 │   ├── manifest.webmanifest  # ホーム画面に追加したときの名前・アイコン
-│   ├── widget/           # ウィジェット用のネコの PNG（5段階 × 2色）
+│   ├── widget/           # ウィジェット用のネコの PNG（5段階 × 白・アプリコット・34品種）
+│   ├── breeds/           # プレゼントで手に入る品種のネコ（breeds.js が描く。34種類 × 5段階。SVG は「ふつう」を書き出したもの）
 │   ├── icons/            # アイコン（液体ネコ。180 / 192 / 512 / maskable 512 / favicon 32）
 │   └── firestore.rules
 ├── chirashi-map/
@@ -426,6 +427,18 @@ artifacts/chirashi-map/public/data/projects/{6文字コード}
 - `cat-sheet.html` を開くと、5段階 × 2色の絵を一覧で確かめられる
 - ホーム画面のアイコンは、アプリコットの液体ネコ
 
+### プレゼント（品種のネコ）
+
+- 加算日に期間を締めたとき、ネコが**液体ネコ（段階4）**なら、プレゼントの箱が届く。箱を押すと、
+  **まだ持っていない品種**から1つがランダムで手に入る（34種類。そろったら届かなくなる）
+- 手に入れた品種は、設定の「ネコの種類」に白・アプリコットと並んで出て、いつでも切り替えられる。
+  どの品種も5段階（ぼさぼさ〜液体ネコ）と、その日の表情に対応している
+- 記録先はプロフィールの `breeds`（手に入れた品種の id の配列）と `giftPeriod`（もらった期間の開始日）。
+  トランザクションで確かめてから書くので、端末が違っても1期間に1回だけ。選んだ種類は `catColor` に品種の id を入れる
+- 書き込みの途中の一瞬の状態で誤って届かないよう、サーバーへの書き込みが済んだ状態（`hasPendingWrites` が false）でだけ判定する
+- 品種の絵は `breeds/breeds.js`（`nekoBreed(id, svgId, 段階, { eye, mouth })`）。`breeds/index.html?lv=0〜4` で全品種を段階ごとに確かめられる。
+  品種を足す・直すときは `BREEDS` の設定を変える。ウィジェット用の PNG（`widget/cat-{品種}-{段階}.png`）も作り直すこと
+
 ### ホーム画面のウィジェット（iPhone・Scriptable）
 
 iPhone のウィジェットはネイティブアプリでないと作れないので、無料アプリ **Scriptable** を使う。小（2×2）サイズ。
@@ -454,7 +467,7 @@ GitHub Pages はファイルを最大10分キャッシュさせる（`cache-cont
 専用プロジェクト **`neko-zukai`** を使う。Google ログイン必須（匿名ログインは使わない）。
 
 ```
-users/{uid}                 catName / catColor / widgetToken / start / opening / configs
+users/{uid}                 catName / catColor / breeds / giftPeriod / widgetToken / start / opening / configs
 widgets/{秘密の番号}          ウィジェット用のまとめ（誰でも get できるが一覧は不可。書けるのは本人だけ）
 users/{uid}/entries/{id}    date / amount / memo / at   （1件1文書）
 ```

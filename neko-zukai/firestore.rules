@@ -13,11 +13,13 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      // 設定（ネコの名前・毛色・開始日・金額と加算日の履歴）
+      // 設定（ネコの名前・種類・手に入れた品種・開始日・金額と加算日の履歴）
       allow read, delete: if isMe(uid);
       allow create, update: if isMe(uid)
-        && request.resource.data.keys().hasOnly(['catName', 'start', 'opening', 'configs', 'catColor', 'widgetToken'])
-        && (!('catColor' in request.resource.data) || request.resource.data.catColor in ['white', 'apricot'])
+        && request.resource.data.keys().hasOnly(['catName', 'start', 'opening', 'configs', 'catColor', 'widgetToken', 'breeds', 'giftPeriod'])
+        && (!('catColor' in request.resource.data) || (request.resource.data.catColor is string && request.resource.data.catColor.size() <= 40))
+        && (!('breeds' in request.resource.data) || (request.resource.data.breeds is list && request.resource.data.breeds.size() <= 100))
+        && (!('giftPeriod' in request.resource.data) || request.resource.data.giftPeriod is string)
         && (!('widgetToken' in request.resource.data) || (request.resource.data.widgetToken is string && request.resource.data.widgetToken.size() >= 20))
         && request.resource.data.catName is string
         && request.resource.data.catName.size() <= 12

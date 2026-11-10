@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEKO-ZUKAI 品種のネコ</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FFF6E9;font-family:"Zen Maru Gothic",sans-serif;color:#5A3E2B;padding-bottom:40px}
+h1{font-size:18px;text-align:center;margin:20px 16px 4px}
+h2{font-size:15px;text-align:center;margin:24px 0 8px}
+p.lead{text-align:center;font-size:13px;margin:0 16px 12px;color:#9A7B62}
+.grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 16px}
+.cell{width:170px;background:#fff;border:1.5px solid #EAD6BC;border-radius:14px;padding:6px;text-align:center;font-size:12px;font-weight:700}
+.cell svg{width:158px;height:151px;display:block;margin:0 auto}
+</style>
+<script src="breeds.js"></script>
+</head><body>
+<h1>NEKO-ZUKAI 品種のネコ</h1>
+<p class="lead">プレゼントで手に入る品種です。段階: <a href="?lv=0">ぼさぼさ</a>・<a href="?lv=1">ふつう</a>・<a href="?lv=2">毛づくろい</a>・<a href="?lv=3">にっこり</a>・<a href="?lv=4">液体ネコ</a></p>
+<div id="out"></div>
+<script>
+const LV = Number(new URLSearchParams(location.search).get('lv') ?? 1);
+const groups = [...new Set(nekoBreeds.map(b => b.group))];
+document.getElementById('out').innerHTML = groups.map(g => `<h2>${g}</h2><div class="grid">${nekoBreeds.filter(b => b.group === g).map(b => `<div class="cell">${nekoBreed(b.id, b.id + LV, LV)}${b.name}</div>`).join('')}</div>`).join('');
+</script>
+</body></html>
