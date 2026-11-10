@@ -44,6 +44,7 @@ my-tools/
 │   ├── cat-sheet.html    # ネコの5段階 × 2色の確認ページ
 │   ├── manifest.webmanifest  # ホーム画面に追加したときの名前・アイコン
 │   ├── widget/           # ウィジェット用のネコの PNG（5段階 × 2色）
+│   ├── breeds/           # 追加コンテンツ用の素材。品種ごとのネコ（breeds.js が描き、34種類の SVG を書き出してある）
 │   ├── icons/            # アイコン（液体ネコ。180 / 192 / 512 / maskable 512 / favicon 32）
 │   └── firestore.rules
 ├── chirashi-map/
