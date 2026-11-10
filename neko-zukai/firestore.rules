@@ -16,8 +16,9 @@ service cloud.firestore {
       // 設定（ネコの名前・毛色・開始日・金額と加算日の履歴）
       allow read, delete: if isMe(uid);
       allow create, update: if isMe(uid)
-        && request.resource.data.keys().hasOnly(['catName', 'start', 'opening', 'configs', 'catColor'])
+        && request.resource.data.keys().hasOnly(['catName', 'start', 'opening', 'configs', 'catColor', 'widgetToken'])
         && (!('catColor' in request.resource.data) || request.resource.data.catColor in ['white', 'apricot'])
+        && (!('widgetToken' in request.resource.data) || (request.resource.data.widgetToken is string && request.resource.data.widgetToken.size() >= 20))
         && request.resource.data.catName is string
         && request.resource.data.catName.size() <= 12
         && request.resource.data.start is string
@@ -37,6 +38,18 @@ service cloud.firestore {
           && request.resource.data.memo.size() <= 40
           && request.resource.data.at is number;
       }
+    }
+
+    // ウィジェット用のまとめ。秘密の番号を知っていれば読める（一覧はできない）。書けるのは本人だけ
+    match /widgets/{token} {
+      allow get: if token.size() >= 20;
+      allow create: if request.auth != null && token.size() >= 20
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'catName', 'color', 'level', 'start', 'end', 'total', 'budget', 'spent', 'streak', 'updated']);
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'catName', 'color', 'level', 'start', 'end', 'total', 'budget', 'spent', 'streak', 'updated']);
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // それ以外の場所は読み書きできない
