@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261111a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261111a">
-<link rel="manifest" href="manifest.webmanifest?v=20261111a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261112a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261112a">
+<link rel="manifest" href="manifest.webmanifest?v=20261112a">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -79,6 +79,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .lv-name{font-size:13px;color:var(--soft)}
 .lv-name b{color:var(--accent);font-weight:900}
 .lv-next{font-size:12px;color:var(--soft);margin-top:6px}
+.miss{font-size:12px;color:var(--soft);text-align:center;margin:8px 0 0}
+.wish{display:block;width:100%;text-align:left;background:var(--bg);border:0;border-radius:14px;padding:10px 12px;margin-top:8px;font:inherit;color:inherit;cursor:pointer}
+.wish.ready{outline:2px solid var(--accent)}
+.wish-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:6px}
+.wish-n{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wish-ops{display:flex;gap:8px;margin-top:10px}
+.wish-ops .btn{flex:1;margin:0;padding:10px 4px;font-size:13px}
+.wish-ops .btn:disabled{opacity:.35}
 .lv-steps{display:flex;gap:4px;margin-top:10px}
 .lv-steps i{flex:1;height:6px;border-radius:9px;background:var(--cream)}
 .lv-steps i.on{background:var(--fur)}
@@ -270,8 +278,8 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261111a"></script>
-<script src="breeds/breeds.js?v=20261111a"></script>
+<script src="cat.js?v=20261112a"></script>
+<script src="breeds/breeds.js?v=20261112a"></script>
 
 <script>
 (() => {
@@ -433,137 +441,129 @@ function configAt(s){
 }
 
 /* =========================================================
-   計算
+   計算（決まりは DESIGN.md 第3部）
+   ・期間の予算は毎月の額だけ。余りもマイナスも次の期間へ持ちこさず、加算日に「貯金」へ入る
+   ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後入れは1週間前まで）
+   ・ネコの段階 = 今期の浮きが「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
    ========================================================= */
-function compute(){
-  const today = todayStr();
-  const spentBy = {};
-  for(const e of data.entries) spentBy[e.date] = (spentBy[e.date]||0) + e.amount;
+const LATE_DAYS = 7;          // 後入れを数えるのは、その日から1週間まで
+const GIFT_RATE = .8;         // プレゼントには、期間の8割以上の日に記録が要る
+const dayDiff = (a, b) => Math.round((a - b) / 864e5);
 
-  // 開始日から今日まで1日ずつ進め、加算日が来たら期間を区切る
-  const periods = [];
-  let cur = { start: data.start, carry: 0, amount: data.opening, spent: 0 };
-  let d = parse(data.start);
-  const end = parse(today);
-  while(d <= end){
-    const s = ymd(d);
-    const cfg = configAt(s);
-    if(s !== data.start && isPayday(d, cfg.payday)){
-      const left = cur.carry + cur.amount - cur.spent;
-      cur.end = ymd(addDays(d, -1));
-      periods.push(cur);
-      cur = { start: s, carry: left, amount: cfg.amount, spent: 0 };
-    }
-    cur.spent += spentBy[s] || 0;
-    d = addDays(d, 1);
+/* 開始日から today を含む期間まで。設定（金額・加算日）は、期間の初めの時点のものをその期間に使う。
+   加算日でない日から始まる期間（最初の期間・加算日を変えた直後）は、日数に合わせた額にする */
+function periodsUntil(today){
+  const out = []; let s = data.start;
+  for(let guard = 0; guard < 2000; guard++){
+    const cfg = configAt(s), sd = parse(s);
+    let n = addDays(sd, 1); while(!isPayday(n, cfg.payday)) n = addDays(n, 1);
+    const days = dayDiff(n, sd);
+    let amount = cfg.amount;
+    if(!isPayday(sd, cfg.payday)) amount = Math.round(cfg.amount * days / dayDiff(n, periodStartOf(sd, cfg.payday)));
+    const p = { start: s, end: ymd(addDays(n, -1)), next: ymd(n), days, amount, unit: amount / days };
+    out.push(p);
+    if(p.end >= today) break;
+    s = p.next;
   }
-
-  // 次の加算日（今の設定で探す）
-  const cfgNow = configAt(today);
-  let next = addDays(end, 1);
-  while(!isPayday(next, cfgNow.payday)) next = addDays(next, 1);
-  cur.end = ymd(addDays(next, -1));
-
-  const remaining = cur.carry + cur.amount - cur.spent;   // 今期の残り
-  const spentToday = spentBy[today] || 0;
-  const daysLeft = Math.round((next - end) / 864e5);       // 今日を含む残り日数
-
-  // 1日の額: 期間の予算を日数で割る。使わなかった分はそのまま翌日へ、使いすぎた分は翌日から引く
-  const all = [...periods, cur];
-  const firstDay = firstCountDay(spentBy, today);
-  const plan = dayPlan(cur, all.length === 1 ? firstDay : cur.start);
-  const spentBefore = cur.spent - spentToday;
-  const share = plan.through(today) - plan.through(ymd(addDays(end, -1)));   // 今日の分
-  const carryDay = plan.through(ymd(addDays(end, -1))) - spentBefore;        // 昨日までの繰り越し（マイナスは使いすぎ）
-  const base = share + carryDay;                                             // 今日使える額（朝の時点）
-  const todayLeft = base - spentToday;
-
-  return {
-    today, cur, periods, remaining, spentToday, daysLeft, base, todayLeft, share, carryDay, plan,
-    next: ymd(next), recordedToday: data.entries.some(e => e.date === today),
-    stamps: stampsOf(all, spentBy, today, firstDay),
-    ...growthOf(cur.carry, periods.length, cfgNow.amount), monthly: cfgNow.amount,
-    ...streakOf(spentBy, today),
-  };
-}
-
-/* 貯まった額とネコの段階。
-   貯まった額 = これまでの期間の余りの合計（= 今期に繰り越された額）。
-   段階は毎月の額に対する割合で決める */
-const LEVELS = [
-  { name: 'ぼさぼさ', min: -Infinity },
-  { name: 'ふつう', min: 0 },
-  { name: '毛づくろい', min: .1 },
-  { name: 'にっこり', min: .5 },
-  { name: '液体ネコ', min: 1 },
-];
-function levelOf(saved, monthly){
-  if(saved < 0) return 0;
-  const r = monthly > 0 ? saved / monthly : 0;
-  let lv = 1;
-  for(let i = 2; i < LEVELS.length; i++) if(r >= LEVELS[i].min) lv = i;
-  return lv;
-}
-function growthOf(carry, closed, monthly){
-  const saved = closed ? carry : 0;
-  const level = levelOf(saved, monthly);
-  const next = level < LEVELS.length - 1 ? Math.max(0, Math.ceil(LEVELS[level + 1].min * monthly) - saved) : 0;
-  return { saved, level, toNext: level === 0 ? -saved : next };
-}
-
-/* カレンダーのスタンプ。記録のある日ごとに、その日の目安を守れたかを出す
-   good = 目安内 / over = 使いすぎ / zero = 使わなかった */
-function stampsOf(periods, spentBy, today, firstDay){
-  const out = {};
-  periods.forEach((p, i) => {
-    const plan = dayPlan(p, i === 0 ? firstDay : p.start);
-    let before = 0;                         // その日より前に使った額
-    const last = parse(p.end);
-    for(let d = parse(p.start); d <= last; d = addDays(d, 1)){
-      const s = ymd(d);
-      if(s > today) break;
-      const spent = spentBy[s];
-      if(spent !== undefined){
-        const can = plan.through(s) - before;   // 繰り越しを含めた、その日に使える額
-        out[s] = spent === 0 ? 'zero' : spent <= can ? 'good' : 'over';
-      }
-      before += spent || 0;
-    }
-  });
   return out;
 }
 
-/* 期間の予算を日割りにする。through(s) = その期間の初めから s の日までに使ってよい額の合計。
-   最後の日にはちょうど予算全体になるので、割り切れない端数も最後に残る */
-function dayPlan(p, from){
-  const start = from > p.start ? from : p.start;
-  const total = Math.round((parse(p.end) - parse(start)) / 864e5) + 1;
-  const budget = p.carry + p.amount;
+function compute(){
+  const today = todayStr();
+  const spentBy = {}, firstAt = {};
+  for(const e of data.entries){
+    spentBy[e.date] = (spentBy[e.date] || 0) + e.amount;
+    firstAt[e.date] = Math.min(firstAt[e.date] ?? Infinity, e.at || 0);
+  }
+  // 数える日 = 記録があり、その日から1週間以内に最初の記録を入れた日
+  const counted = s => spentBy[s] !== undefined && firstAt[s] < addDays(parse(s), LATE_DAYS + 1).getTime();
+
+  const all = periodsUntil(today), stamps = {};
+  let savings = 0;
+  for(const p of all){
+    let float = 0, spent = 0, rec = 0, d = parse(p.start);
+    p.floatBefore = 0; p.shareToday = 0;
+    for(let k = 0; k < p.days; k++, d = addDays(d, 1)){
+      const s = ymd(d);
+      if(s > today) break;
+      const share = Math.floor(p.amount * (k + 1) / p.days) - Math.floor(p.amount * k / p.days);   // その日の分。足すとちょうど予算になる
+      if(s === today){ p.floatBefore = float; p.shareToday = share; }
+      const sp = spentBy[s];
+      if(sp === undefined) continue;
+      spent += sp;
+      if(counted(s)){
+        rec++;
+        stamps[s] = sp === 0 ? 'zero' : sp <= share + Math.max(0, float) ? 'good' : 'over';
+        float += share - sp;
+      } else stamps[s] = 'late';
+    }
+    p.float = float; p.spent = spent; p.rec = rec; p.level = levelOf(float, p.unit);
+    p.closed = p.end < today;
+    if(p.closed){
+      savings += float;                                        // 加算日に、浮き（マイナスも）が貯金へ
+      p.gift = p.level === 4 && rec >= p.days * GIFT_RATE;      // 液体ネコで終え、8割以上の日に記録
+    }
+  }
+  const cur = all[all.length - 1], periods = all.slice(0, -1);
+  savings -= (data.wishes || []).filter(w => w.bought).reduce((a, w) => a + w.price, 0);
+
+  const spentToday = spentBy[today] || 0;
+  let missing = 0;   // この1週間で、まだ記録のない日（後入れできる）
+  for(let i = 1; i <= LATE_DAYS; i++){ const s = ymd(addDays(parse(today), -i)); if(s >= cur.start && spentBy[s] === undefined) missing++; }
+
   return {
-    start, total, budget,
-    through(s){
-      if(s < start) return 0;
-      const k = Math.min(total, Math.round((parse(s) - parse(start)) / 864e5) + 1);
-      return Math.floor(budget * k / total);
-    },
+    today, cur, periods, savings, stamps, missing, spentToday,
+    recordedToday: spentBy[today] !== undefined,
+    share: cur.shareToday, floatBefore: cur.floatBefore, float: cur.float,
+    todayLeft: cur.shareToday + cur.floatBefore - spentToday,
+    level: cur.level, toNext: toNextLevel(cur.float, cur.unit),
+    daysLeft: dayDiff(parse(cur.next), parse(today)), next: cur.next,
+    ...streakOf(counted, spentBy, today),
   };
 }
-/* 最初の期間は、記録を始めた日から数える（それより前の日を「使わなかった日」として繰り越さないため） */
-function firstCountDay(spentBy, today){
-  const days = Object.keys(spentBy).filter(s => s >= data.start).sort();
-  return days.length && days[0] < today ? days[0] : today;
+
+/* ネコの段階。今期の浮きが 1日ぶん（unit）の何日ぶんか */
+const LEVELS = [
+  { name: 'ぼさぼさ' },            // マイナス3日ぶんより下
+  { name: 'ふつう' },
+  { name: '毛づくろい', min: 2 },
+  { name: 'にっこり', min: 7 },
+  { name: '液体ネコ', min: 10 },
+];
+const LEVEL_LOW = -3;
+function levelOf(float, unit){
+  if(!(unit > 0)) return 1;
+  if(float < LEVEL_LOW * unit) return 0;
+  let lv = 1;
+  for(let i = 2; i < LEVELS.length; i++) if(float >= LEVELS[i].min * unit) lv = i;
+  return lv;
+}
+/* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら浮かせればよいか */
+function toNextLevel(float, unit){
+  const lv = levelOf(float, unit);
+  if(lv === 0) return Math.ceil(LEVEL_LOW * unit - float);
+  if(lv < LEVELS.length - 1) return Math.ceil(LEVELS[lv + 1].min * unit - float);
+  return 0;
 }
 
-/* 連続記録。あとから入れた日もつながる。今日まだ記録していなくても、昨日までつながっていれば途切れない */
-function streakOf(spentBy, today){
-  const has = s => spentBy[s] !== undefined;
+/* ほしいもの。貯金を上から順に割り当てる */
+function wishPlan(savings){
+  let rest = Math.max(0, savings);
+  return (data.wishes || []).filter(w => !w.bought).map(w => {
+    const got = Math.min(w.price, rest); rest -= got;
+    return { ...w, got, ready: got >= w.price };
+  });
+}
+
+/* 連続記録。数える日（1週間以内に入れた日）だけがつながる。今日まだ記録していなくても、昨日までつながっていれば途切れない */
+function streakOf(has, spentBy, today){
   let d = parse(today);
   if(!has(today)) d = addDays(d, -1);
   let streak = 0;
   while(has(ymd(d))){ streak++; d = addDays(d, -1); }
 
   let best = 0, run = 0, prev = null;
-  for(const s of Object.keys(spentBy).sort()){
+  for(const s of Object.keys(spentBy).filter(has).sort()){
     run = prev && ymd(addDays(parse(prev), 1)) === s ? run + 1 : 1;
     best = Math.max(best, run); prev = s;
   }
@@ -577,7 +577,7 @@ const LINES = {
   waiting: ['きょうは何に使ったにゃ？','記録をまってるにゃ','使わなかった日も教えてほしいにゃ'],
   happy:   ['きょうも記録えらいにゃ','いい調子だにゃ','おさいふにやさしい一日だにゃ','この調子でいくにゃ'],
   over:    ['ちょっと使いすぎたにゃ…','だいじょうぶ、あしたの目安がすこし下がるだけにゃ','あしたから取りもどすにゃ'],
-  minus:   ['今期はマイナスだにゃ…','次の加算日までがまんだにゃ','マイナスの分は次の期間から引かれるにゃ'],
+  minus:   ['今期は使いすぎだにゃ…','あしたから少しずつ取りもどすにゃ','使わない日を作ると、毛並みがもどるにゃ'],
   zero:    ['使わない日、すてきだにゃ','おさいふがよろこんでるにゃ'],
   pet:     ['にゃ〜ん','ごろごろ…','なでてくれてうれしいにゃ','ふみふみ…'],
   saved:   ['記録したにゃ！','ちゃんと書けてえらいにゃ','おぼえたにゃ'],
@@ -585,7 +585,7 @@ const LINES = {
 const pick = a => a[Math.floor(Math.random()*a.length)];
 
 function moodOf(c){
-  if(c.remaining < 0) return { face:'sad', line: pick(LINES.minus) };
+  if(c.level === 0) return { face:'sad', line: pick(LINES.minus) };
   if(c.todayLeft < 0) return { face:'worried', line: pick(LINES.over) };
   if(c.recordedToday && c.spentToday === 0) return { face:'happy', line: pick(LINES.zero) };
   if(c.recordedToday) return { face:'happy', line: pick(LINES.happy) };
@@ -614,8 +614,10 @@ function render(){
   const mood = moodOf(c);
   if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
   const line = said.until > Date.now() ? said.text : moodMemo.line;
-  const budget = c.cur.carry + c.cur.amount;
-  const usedPct = budget > 0 ? Math.min(100, Math.max(0, c.remaining / budget * 100)) : 0;
+  const budget = c.cur.amount, remaining = budget - c.cur.spent;
+  const usedPct = budget > 0 ? Math.min(100, Math.max(0, remaining / budget * 100)) : 0;
+  const giftNeed = Math.ceil(c.cur.days * GIFT_RATE);
+  const wishes = wishPlan(c.savings);
 
   const byDay = {};
   for(const e of data.entries) if(e.date >= c.cur.start) (byDay[e.date] ||= []).push(e);
@@ -632,7 +634,7 @@ function render(){
     <section class="today">
       <div class="lbl">今日つかえるお金</div>
       <div class="amt num ${c.todayLeft < 0 ? 'minus' : ''}">${yen(c.todayLeft)}</div>
-      <div class="sub">今日の分 <b class="num">${yen(c.share)}</b> ${c.carryDay >= 0 ? '＋ 前日までの繰り越し' : '− 前日までの使いすぎ'} <b class="num">${yen(Math.abs(c.carryDay))}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
+      <div class="sub">今日の分 <b class="num">${yen(c.share)}</b> ${c.floatBefore >= 0 ? '＋ 今期の浮き' : '− 今期の使いすぎ'} <b class="num">${yen(Math.abs(c.floatBefore))}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
     </section>
 
     <section class="stage">
@@ -643,6 +645,7 @@ function render(){
     <div class="actions">
       <button class="btn" id="open-entry">🐾 使ったお金を入れる</button>
       ${c.recordedToday ? '' : '<button class="btn ghost" id="zero-day">今日は使わなかった</button>'}
+      ${c.missing ? `<p class="miss">記録していない日が ${c.missing}日あるにゃ。1週間以内なら、カレンダーから入れられるにゃ</p>` : ''}
     </div>
 
     <section class="streak">
@@ -654,14 +657,23 @@ function render(){
     </section>
 
     <section class="card save">
-      <div class="save-top"><h2 style="margin:0">貯まった額</h2><span class="v num ${c.saved < 0 ? 'minus' : ''}">${yen(c.saved)}</span></div>
+      <div class="save-top"><h2 style="margin:0">今期の浮き</h2><span class="v num ${c.float < 0 ? 'minus' : ''}">${yen(c.float)}</span></div>
       <div class="lv-name">${esc(data.catName)}は いま <b>${LEVELS[c.level].name}</b></div>
       <div class="lv-steps">${LEVELS.map((_, i) => `<i class="${i <= c.level && c.level > 0 ? 'on' : ''}"></i>`).join('')}</div>
-      <div class="lv-next">${c.level === 0 ? `あと ${yen(c.toNext)} で ふつうに戻るにゃ`
-        : c.level < LEVELS.length - 1 ? `あと ${yen(c.toNext)} 貯まると「${LEVELS[c.level + 1].name}」になるにゃ`
-        : 'いちばん上の段階だにゃ。ずっとこのままでいたいにゃ'}</div>
-      <div class="lv-next">${c.periods.length ? '' : '加算日に余った分が、ここに貯まっていくにゃ'}</div>
-      ${c.periods.length ? '<button class="btn ghost" id="open-history" style="margin-top:4px">これまでの振り返り</button>' : ''}
+      <div class="lv-next">${c.level === 0 ? `あと ${yen(c.toNext)} 浮かせると「ふつう」に戻るにゃ`
+        : c.level < LEVELS.length - 1 ? `あと ${yen(c.toNext)} 浮かせると「${LEVELS[c.level + 1].name}」になるにゃ`
+        : 'このまま期間を終えると、プレゼントがもらえるにゃ'}</div>
+      <div class="lv-next">記録した日 ${c.cur.rec} / ${c.cur.days}日（プレゼントには ${giftNeed}日以上）</div>
+    </section>
+
+    <section class="card">
+      <div class="save-top"><h2 style="margin:0">貯金</h2><span class="v num ${c.savings < 0 ? 'minus' : ''}">${yen(c.savings)}</span></div>
+      <div class="lv-next">加算日に、今期の浮きがここに入るにゃ。ほしいものを買うときに使うにゃ</div>
+      ${wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${w.id}">
+        <span class="wish-top"><span class="wish-n">${i + 1}. ${esc(w.name)}</span><span class="num">${w.ready ? '買えるにゃ！' : `${yen(w.got)} / ${yen(w.price)}`}</span></span>
+        <span class="bar"><i style="width:${Math.round(w.got / w.price * 100)}%"></i></span></button>`).join('')}
+      <button class="btn ghost" id="wish-add" style="margin-top:6px">＋ ほしいものを足す</button>
+      ${c.periods.length ? '<button class="btn ghost" id="open-history">これまでの振り返り</button>' : ''}
     </section>
 
     ${calendarHTML(c)}
@@ -669,12 +681,12 @@ function render(){
     <section class="card">
       <h2>今期（${md(c.cur.start)} 〜 ${md(c.cur.end)}）</h2>
       <div class="stats">
-        <div><div class="k">今期の残り</div><div class="v num ${c.remaining < 0 ? 'minus' : ''}">${yen(c.remaining)}</div></div>
+        <div><div class="k">今期の残り</div><div class="v num ${remaining < 0 ? 'minus' : ''}">${yen(remaining)}</div></div>
         <div><div class="k">次の加算日まで</div><div class="v num">あと${c.daysLeft}日</div></div>
-        <div><div class="k">今期使える額</div><div class="v num">${yen(budget)}</div></div>
-        <div><div class="k">${c.periods.length ? '先月からの繰越' : '開始時の残り'}</div><div class="v num ${c.cur.carry < 0 ? 'minus' : ''}">${c.periods.length ? yen(c.cur.carry) : yen(c.cur.amount)}</div></div>
+        <div><div class="k">今期の予算</div><div class="v num">${yen(budget)}</div></div>
+        <div><div class="k">今期使った額</div><div class="v num">${yen(c.cur.spent)}</div></div>
       </div>
-      <div class="bar ${c.remaining < 0 ? 'minus' : ''}"><i style="width:${usedPct}%"></i></div>
+      <div class="bar ${remaining < 0 ? 'minus' : ''}"><i style="width:${usedPct}%"></i></div>
     </section>
 
     <section class="card">
@@ -700,7 +712,9 @@ function render(){
   const z = $app.querySelector('#zero-day');
   if(z) z.onclick = () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); };
   $app.querySelectorAll('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
-  $app.querySelectorAll('.cal-d[data-d]').forEach(b => b.onclick = () => openEntry(null, b.dataset.d));
+  $app.querySelectorAll('.cal-d[data-d]').forEach(b => b.onclick = () => openDay(b.dataset.d, c));
+  $app.querySelectorAll('.wish').forEach(b => b.onclick = () => openWish(b.dataset.id));
+  $app.querySelector('#wish-add').onclick = () => openWish(null);
   $app.querySelectorAll('.cal-nav').forEach(b => b.onclick = () => { calMonth = b.dataset.m; render(); });
   const h = $app.querySelector('#open-history'); if(h) h.onclick = () => openHistory(c);
   maybeReview(c);
@@ -709,8 +723,15 @@ function render(){
   maybeOpenAdd();
 }
 
+/* 振り返り・プレゼントなどの画面を閉じたあとに、次に出すものを確かめる */
+function afterSheets(){
+  if(!data || document.querySelector('.sheet')) return;
+  maybeGift(compute());
+  maybeOpenAdd();
+}
+
 /* =========================================================
-   締めの振り返り（加算日のあと、初めて開いたときに一度だけ）
+   締めの振り返り（加算日のあと、初めて開いたときに一度だけ。見たことはアカウントに記録する）
    ========================================================= */
 const seenKey = () => 'neko-zukai-review-' + FB.user.uid;
 function maybeReview(c){
@@ -718,46 +739,55 @@ function maybeReview(c){
   if(!FB.profileLive || !FB.entriesLive) return;
   if(document.querySelector('.sheet')) return;
   let seen = null; try{ seen = localStorage.getItem(seenKey()); }catch(e){}
-  if(seen === c.cur.start) return;
+  if(FB.profile.reviewSeen === c.cur.start || seen === c.cur.start) return;
   try{ localStorage.setItem(seenKey(), c.cur.start); }catch(e){}
+  userRef().set({ reviewSeen: c.cur.start }, { merge: true }).catch(() => {});
   if(!c.periods.length) return;   // まだ締めたことがない
   const last = c.periods[c.periods.length - 1];
-  const surplus = last.amount - last.spent;               // その期間に浮かせた額
   const before = c.periods.length > 1 ? c.periods[c.periods.length - 2] : null;
-  const prevLv = levelOf(c.periods.length > 1 ? last.carry : 0, c.monthly);
-  const lunch = Math.floor(surplus / 800);
+  const f = last.float, diff = before ? f - before.float : 0;
   const { sheet, close } = openSheet(`
     <div class="review">
       <div id="rv-cat"></div>
       <p>${md(last.start)} 〜 ${md(last.end)} の振り返り</p>
-      <div class="big num ${surplus < 0 ? 'minus' : ''}">${surplus >= 0 ? yen(surplus) + ' 浮いたにゃ！' : yen(-surplus) + ' 使いすぎたにゃ…'}</div>
-      ${surplus > 0 && lunch > 0 ? `<p>ランチ ${lunch}回分のお金を、使わずにすんだにゃ</p>` : ''}
-      ${before ? `<p>その前の期間より ${surplus - (before.amount - before.spent) >= 0 ? yen(surplus - (before.amount - before.spent)) + ' 多く' : yen((before.amount - before.spent) - surplus) + ' 少なく'}浮いたにゃ</p>` : ''}
-      <p>貯まった額は ${yen(c.saved)} になったにゃ</p>
-      ${c.level > prevLv ? `<div class="up">${esc(data.catName)}が「${LEVELS[c.level].name}」になったにゃ！</div>` : ''}
-      ${c.level < prevLv ? `<div class="up">${esc(data.catName)}が「${LEVELS[c.level].name}」になっちゃったにゃ…</div>` : ''}
-      <button class="btn" id="rv-ok" style="margin-top:18px">${surplus >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
-    </div>`);
-  sheet.querySelector('#rv-cat').replaceWith(makeCat(c.level, surplus >= 0 ? 'happy' : 'worried', 'rv'));
-  sheet.querySelector('#rv-ok').onclick = () => { close(); maybeGift(c); };
+      <div class="big num ${f < 0 ? 'minus' : ''}">${f >= 0 ? yen(f) + ' 浮いたにゃ！' : yen(-f) + ' 使いすぎたにゃ…'}</div>
+      <p>${f > 0 ? '浮いた分は貯金に入れたにゃ。' : f < 0 ? '使いすぎた分は貯金から引いたにゃ。' : ''}貯金は ${yen(c.savings)} になったにゃ</p>
+      <p>記録した日 ${last.rec} / ${last.days}日・「${LEVELS[last.level].name}」で終えたにゃ</p>
+      ${before ? `<p>その前の期間より ${diff >= 0 ? yen(diff) + ' 多く' : yen(-diff) + ' 少なく'}浮いたにゃ</p>` : ''}
+      ${last.gift ? '<div class="up">液体ネコで終えたごほうびがあるにゃ！</div>'
+        : last.level === 4 ? '<div class="up">記録が8割にとどかなかったので、プレゼントはおあずけにゃ</div>' : ''}
+      <button class="btn" id="rv-ok" style="margin-top:18px">${f >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
+    </div>`, afterSheets);
+  sheet.querySelector('#rv-cat').replaceWith(makeCat(last.level, f >= 0 ? 'happy' : 'worried', 'rv'));
+  sheet.querySelector('#rv-ok').onclick = close;
 }
 
 /* =========================================================
    プレゼント
-   期間を締めたとき液体ネコ（段階4）なら、まだ持っていない品種を1つもらえる。
-   もらったかどうかはアカウントに記録する（giftPeriod = もらった期間の開始日）ので、端末が違っても1期間に1回だけ
+   液体ネコで期間を終え、その期間の8割以上の日に記録があれば、まだ持っていない品種を1つもらえる。
+   もらった期間（開始日）をアカウントの gifts に記録するので、端末が違っても1期間に1回だけ。
+   開かなかった期間のぶんも、あとから1つずつ受け取れる
    ========================================================= */
 let giftBusy = false;
-function giftReady(c){
-  if(!FB.profileLive || !FB.entriesLive || !c.periods.length || c.level !== 4) return false;
-  if(FB.profile.giftPeriod === c.cur.start) return false;
-  return allBreeds().length > ownedBreeds().length;
+function giftedSet(c){
+  const g = new Set(FB.profile.gifts || []);
+  const old = FB.profile.giftPeriod;   // 前の決まりでの記録（もらった期間の「次の期間」の開始日）
+  if(old){ const p = c.periods.find(p => p.next === old); if(p) g.add(p.start); }
+  return g;
+}
+function pendingGift(c){
+  if(!FB.profileLive || !FB.entriesLive) return null;
+  if(allBreeds().length <= ownedBreeds().length) return null;
+  const g = giftedSet(c);
+  return c.periods.find(p => p.gift && !g.has(p.start)) || null;
 }
 function maybeGift(c){
-  if(giftBusy || document.querySelector('.sheet') || !giftReady(c)) return;
+  if(giftBusy || document.querySelector('.sheet')) return;
+  const p = pendingGift(c);
+  if(!p) return;
   const { sheet, close } = openSheet(`
     <div class="review gift">
-      <p>液体ネコのまま期間を終えたごほうびだにゃ</p>
+      <p>${md(p.start)} 〜 ${md(p.end)} を、液体ネコで終えたごほうびだにゃ</p>
       <button class="gift-box" id="gift-open" aria-label="プレゼントを開ける">
         <svg viewBox="0 0 120 120" width="150" height="150"><rect x="18" y="52" width="84" height="56" rx="8" fill="#F3B76C" stroke="#5A3E2B" stroke-width="4"/>
           <rect x="12" y="34" width="96" height="24" rx="8" fill="#F6C98C" stroke="#5A3E2B" stroke-width="4"/>
@@ -766,25 +796,26 @@ function maybeGift(c){
       </button>
       <div class="big" style="font-size:22px">プレゼントがとどいたにゃ！</div>
       <p>箱を押して開けてね</p>
-    </div>`);
+    </div>`, afterSheets);
   sheet.querySelector('#gift-open').onclick = async () => {
     if(giftBusy) return; giftBusy = true;
     let got = null;
     try{
       // 2つの端末で同時に開けても1つだけになるよう、トランザクションで確かめてから書く
       got = await FB.db.runTransaction(async tx => {
-        const snap = await tx.get(userRef()), p = snap.data() || {};
-        if(p.giftPeriod === c.cur.start) return null;
-        const owned = p.breeds || [], rest = allBreeds().filter(b => !owned.includes(b.id));
+        const snap = await tx.get(userRef()), pr = snap.data() || {};
+        const gifts = pr.gifts || [];
+        if(gifts.includes(p.start)) return null;
+        const owned = pr.breeds || [], rest = allBreeds().filter(b => !owned.includes(b.id));
         if(!rest.length) return null;
         const pick = rest[Math.floor(Math.random() * rest.length)];
-        tx.set(userRef(), { breeds: [...owned, pick.id], giftPeriod: c.cur.start }, { merge: true });
+        tx.set(userRef(), { breeds: [...owned, pick.id], gifts: [...gifts, p.start] }, { merge: true });
         return pick;
       });
     }catch(e){ giftBusy = false; toast(e && e.code === 'permission-denied' ? 'Firestore のルールの更新が必要だにゃ' : fbMessage(e)); return; }
     giftBusy = false;
     if(!got){ close(); return; }
-    FB.profile = { ...FB.profile, breeds: [...(FB.profile.breeds || []), got.id], giftPeriod: c.cur.start };
+    FB.profile = { ...FB.profile, breeds: [...(FB.profile.breeds || []), got.id], gifts: [...(FB.profile.gifts || []), p.start] };
     const box = sheet.querySelector('.gift');
     box.innerHTML = `<p>あたらしいネコが来たにゃ！</p><div id="gift-cat"></div>
       <div class="big" style="font-size:22px">${esc(got.name)}</div>
@@ -793,29 +824,103 @@ function maybeGift(c){
       <button class="btn ghost" id="gift-later">あとで設定から変える</button>`;
     const cat = makeCat(3, 'happy', 'gift', got.id); cat.classList.add('pop');
     box.querySelector('#gift-cat').replaceWith(cat);
-    box.querySelector('#gift-use').onclick = () => { close(); saveColor(got.id); FB.profile = { ...FB.profile, catColor: got.id }; say('すがたが変わったにゃ！'); render(); };
+    box.querySelector('#gift-use').onclick = () => { saveColor(got.id); FB.profile = { ...FB.profile, catColor: got.id }; rebuild(); say('すがたが変わったにゃ！'); close(); render(); };
     box.querySelector('#gift-later').onclick = close;
   };
 }
 
 /* これまでの期間の一覧 */
 function openHistory(c){
-  const rows = c.periods.slice().reverse().map(p => {
-    const sur = p.amount - p.spent;
-    return `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${sur >= 0 ? 'plus' : 'minus'}">${sur >= 0 ? '+' : ''}${yen(sur)}</td><td class="num">${yen(p.carry + sur)}</td></tr>`;
-  }).join('');
-  const { sheet } = openSheet(`
+  const rows = c.periods.slice().reverse().map(p =>
+    `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${p.float >= 0 ? 'plus' : 'minus'}">${p.float >= 0 ? '+' : ''}${yen(p.float)}</td><td class="num">${p.rec}/${p.days}日</td><td>${LEVELS[p.level].name}</td></tr>`).join('');
+  const bought = (data.wishes || []).filter(w => w.bought);
+  openSheet(`
     <h3>これまでの振り返り</h3>
-    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>浮いた</th><th>貯まった額</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note">「浮いた」は、その期間に足された額から使った額を引いたものだにゃ</p>`);
+    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>浮き</th><th>記録</th><th>終わり</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note" style="text-align:left">「浮き」は、記録した日の（その日の分 − 使った額）の合計だにゃ。加算日に貯金へ入るにゃ</p>
+    ${bought.length ? `<h3 style="margin-top:18px">貯金で買ったもの</h3>${bought.map(w => `<div class="day-h" style="padding:6px 0"><span>${md(w.bought)}　${esc(w.name)}</span><span class="num">${yen(w.price)}</span></div>`).join('')}` : ''}`);
+}
+
+/* その日の記録を見る・直す・足す（カレンダーの日を押したとき） */
+function openDay(date, c){
+  const list = data.entries.filter(e => e.date === date).sort((a, b) => b.at - a.at);
+  const tooOld = date < ymd(addDays(parse(c.today), -LATE_DAYS));
+  const late = c.stamps[date] === 'late' || (!list.length && tooOld);
+  if(!list.length && !late) return openEntry(null, date);
+  const { sheet, close } = openSheet(`
+    <h3>${md(date)} の記録</h3>
+    ${list.length ? list.map(e => `<button class="ent" data-id="${e.id}">
+      <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
+      <span class="yen num">${yen(e.amount)}</span></button>`).join('') : '<p class="empty">この日の記録はないにゃ</p>'}
+    ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、今期の浮きや連続記録には数えないにゃ（記録として残すことはできるにゃ）</p>' : ''}
+    <button class="btn" id="day-add" style="margin-top:12px">この日に記録を足す</button>`);
+  sheet.querySelectorAll('.ent').forEach(b => b.onclick = () => { close(); openEntry(data.entries.find(e => e.id === b.dataset.id)); });
+  sheet.querySelector('#day-add').onclick = () => { close(); openEntry(null, date); };
+}
+
+/* =========================================================
+   ほしいもの（貯金の使いみち）
+   上から順に貯金を割り当てる。届いたものは「買った」にでき、そのぶん貯金が減る。ネコの段階には関係しない
+   ========================================================= */
+function saveWishes(list){
+  FB.profile = { ...FB.profile, wishes: list }; rebuild(); render();
+  userRef().set({ wishes: list }, { merge: true }).catch(e => toast(e && e.code === 'permission-denied' ? 'Firestore のルールの更新が必要だにゃ' : fbMessage(e)));
+}
+function openWish(id){
+  const all = (data.wishes || []).slice();
+  const w = all.find(x => x.id === id), open = all.filter(x => !x.bought), pos = w ? open.indexOf(w) : -1;
+  const plan = w ? wishPlan(compute().savings).find(x => x.id === id) : null;
+  const { sheet, close } = openSheet(`
+    <h3>${w ? 'ほしいもの' : 'ほしいものを足す'}</h3>
+    <div class="form">
+      <label>なまえ<input class="field" id="w-name" maxlength="20" value="${w ? esc(w.name) : ''}" placeholder="例: スニーカー"></label>
+      <label>ねだん<div class="yen-field"><input class="field num" id="w-price" inputmode="numeric" value="${w ? w.price : ''}" placeholder="12000"></div></label>
+      <p class="err" id="w-err"></p>
+    </div>
+    ${plan && plan.ready ? '<button class="btn" id="w-buy">貯金で買ったにゃ！</button>' : ''}
+    <button class="btn ${plan && plan.ready ? 'ghost' : ''}" id="w-save" style="margin-top:8px">保存する</button>
+    ${w ? `<div class="wish-ops">
+      <button class="btn ghost" id="w-up" ${pos <= 0 ? 'disabled' : ''}>▲ 先にする</button>
+      <button class="btn ghost" id="w-down" ${pos >= open.length - 1 ? 'disabled' : ''}>▼ 後にする</button>
+      <button class="btn ghost" id="w-del" style="color:var(--minus)">消す</button></div>` : ''}
+    <p class="note" style="text-align:left">貯金は、上にあるものから順に割り当てるにゃ</p>`);
+  const read = () => {
+    const name = sheet.querySelector('#w-name').value.trim(), price = Number(sheet.querySelector('#w-price').value.replace(/[^\d]/g, ''));
+    if(!name){ sheet.querySelector('#w-err').textContent = 'なまえを入れてほしいにゃ'; return null; }
+    if(!price){ sheet.querySelector('#w-err').textContent = 'ねだんを入れてほしいにゃ'; return null; }
+    return { name, price };
+  };
+  sheet.querySelector('#w-save').onclick = () => {
+    const f = read(); if(!f) return;
+    if(w) Object.assign(w, f); else all.push({ id: uid(), ...f });
+    close(); saveWishes(all);
+  };
+  const move = k => { const i = all.indexOf(w), other = open[pos + k], j = all.indexOf(other); all[i] = other; all[j] = w; close(); saveWishes(all); };
+  const q = s => sheet.querySelector(s);
+  if(q('#w-up')) q('#w-up').onclick = () => move(-1);
+  if(q('#w-down')) q('#w-down').onclick = () => move(1);
+  if(q('#w-del')) q('#w-del').onclick = () => { if(!confirm('このほしいものを消しますか？')) return; close(); saveWishes(all.filter(x => x !== w)); };
+  if(q('#w-buy')) q('#w-buy').onclick = () => {
+    const f = read(); if(!f) return;
+    Object.assign(w, f, { bought: todayStr() });
+    close(); saveWishes(all);
+    const s2 = openSheet(`<div class="review"><div id="buy-cat"></div>
+      <div class="big" style="font-size:22px">「${esc(w.name)}」を買えたにゃ！</div>
+      <p>貯めたお金で買えたにゃ。おめでとうにゃ！</p>
+      <p>貯金は ${yen(compute().savings)} になったにゃ</p>
+      <button class="btn" id="buy-ok" style="margin-top:18px">やったにゃ</button></div>`);
+    const cat = makeCat(3, 'happy', 'buy'); cat.classList.add('pop');
+    s2.sheet.querySelector('#buy-cat').replaceWith(cat);
+    s2.sheet.querySelector('#buy-ok').onclick = s2.close;
+  };
 }
 
 /* =========================================================
    カレンダー（肉球スタンプ）
    ========================================================= */
 const PAW = c => `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="26" rx="9" ry="8" fill="${c}"/><circle cx="9" cy="16" r="4" fill="${c}"/><circle cx="16" cy="9" r="4" fill="${c}"/><circle cx="24" cy="9" r="4" fill="${c}"/><circle cx="31" cy="16" r="4" fill="${c}"/></svg>`;
-const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E' };
-const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった' };
+const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E', late: '#EDE3D6' };
+const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった', late: '1週間すぎ（数えない）' };
 let calMonth = null;   // 'YYYY-MM'。null なら今月
 let seenStamps = null; // 前回描いたスタンプ。新しく押された日だけ動かす
 
@@ -996,8 +1101,7 @@ function settingsForm(v){
       <label>お金が加算される日<span class="hint">29〜31日を選ぶと、短い月は月末に加算します</span>
         <select class="field" id="f-payday">${Array.from({length:31}, (_,i) => `<option value="${i+1}" ${i+1 === v.payday ? 'selected' : ''}>毎月 ${i+1}日</option>`).join('')}</select>
       </label>
-      ${v.setup ? `<label>今期の残り<span class="hint">いま自由に使えるお金。加算日に受け取ったばかりなら、毎月の額と同じです</span>
-        <div class="yen-field"><input class="field num" id="f-opening" inputmode="numeric" placeholder="毎月の額と同じ"></div></label>` : ''}
+      ${v.setup ? '<p class="hint" style="font-size:12px;color:var(--soft);margin-top:8px">最初の期間は、次の加算日までの日数ぶんの額から始まるにゃ</p>' : ''}
       <p class="err" id="f-err"></p>
     </div>`;
 }
@@ -1007,12 +1111,10 @@ function readForm(root, setup){
   const amountRaw = root.querySelector('#f-amount').value;
   const amount = n(amountRaw);
   const payday = Number(root.querySelector('#f-payday').value);
-  let opening = amount;
-  if(setup){ const o = root.querySelector('#f-opening').value; if(o.trim() !== '') opening = n(o); }
   if(!name) return { err: 'ネコの名前を入れてほしいにゃ' };
   if(!amount) return { err: '毎月の金額を入れてほしいにゃ' };
   const color = (root.querySelector('.color-opt.on') || {}).dataset?.color || 'white';
-  return { name, amount, payday, opening, color };
+  return { name, amount, payday, color };
 }
 
 function renderSetup(){
@@ -1032,13 +1134,13 @@ function renderSetup(){
   $app.querySelector('#start').onclick = () => {
     const f = readForm($app, true);
     if(f.err){ $app.querySelector('#f-err').textContent = f.err; return; }
-    const start = ymd(periodStartOf(new Date(), f.payday));
+    const start = todayStr();   // 最初の期間は今日から。額は日数に合わせる（periodsUntil）
     say(`${f.name}だにゃ。よろしくにゃ！`);
     $app.innerHTML = '';
     try{ localStorage.setItem(COLOR_KEY, f.color); }catch(e){}
     // 毛色だけの書き込みは、設定の文書ができてから（ルールが名前などを必須にしているため）
     saveProfile({
-      catName: f.name, start, opening: f.opening,
+      catName: f.name, start, opening: 0,
       configs: [{ from: start, amount: f.amount, payday: f.payday }],
     }).then(() => saveColor(f.color));
   };
@@ -1072,18 +1174,20 @@ function renderLogin(){
 }
 
 function openSettings(){
-  const cfg = configAt(todayStr());
+  // 金額と加算日は、いまの期間が終わってから効く。画面には「次の期間から」の値を出す
+  const c0 = compute(), now = configAt(c0.cur.start), cfg = configAt(c0.next);
+  const pending = cfg.amount !== now.amount || cfg.payday !== now.payday;
   const { sheet, close } = openSheet(`
     <h3>設定</h3>
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
-    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日から反映されます。それまでの記録はそのままです。</p>
+    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。
+      ${pending ? `<br>いまは 毎月 ${yen(now.amount)}・${now.payday}日。${md(c0.next)} から上の内容になるにゃ` : ''}</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
     <button class="btn ghost" id="s-widget" style="margin-top:14px">ホーム画面のウィジェットを設定する</button>
     <div class="acct">
       <span>${esc(FB.user.email || '')} でログイン中</span>
       <button class="btn ghost" id="s-out">ログアウト</button>
     </div>
-    <button class="btn ghost" id="s-reset" style="margin-top:6px;color:var(--minus)">すべての記録を消して最初から</button>
   `);
   bindColorPick(sheet);
   sheet.querySelector('#s-save').onclick = () => {
@@ -1093,28 +1197,15 @@ function openSettings(){
     const p = profileOf(data);
     p.catName = f.name;
     if(f.amount !== cfg.amount || f.payday !== cfg.payday){
-      const t = todayStr();
-      p.configs = p.configs.filter(x => x.from !== t || x === p.configs[0]);
-      p.configs.push({ from: t, amount: f.amount, payday: f.payday });
+      p.configs = p.configs.filter(x => x.from !== c0.next);
+      // 今期と同じ内容に戻したときは、予約を消すだけ
+      if(f.amount !== now.amount || f.payday !== now.payday) p.configs.push({ from: c0.next, amount: f.amount, payday: f.payday });
+      p.configs.sort((a, b) => a.from < b.from ? -1 : a.from > b.from ? 1 : 0);
     }
     close(); saveProfile(p); toast('保存したにゃ');
   };
   sheet.querySelector('#s-widget').onclick = () => { close(); openWidgetSetup(); };
   sheet.querySelector('#s-out').onclick = () => { close(); firebase.auth().signOut().catch(saveErr); };
-  sheet.querySelector('#s-reset').onclick = async () => {
-    if(!confirm('すべての記録と設定を消します。ほかの端末からも消えて、元に戻せません。よろしいですか？')) return;
-    close();
-    try{
-      const ids = data.entries.map(e => e.id);
-      for(let i = 0; i < ids.length; i += 400){
-        const b = FB.db.batch();
-        ids.slice(i, i + 400).forEach(id => b.delete(entryCol().doc(id)));
-        await b.commit();
-      }
-      if(widgetToken()) await FB.db.collection('widgets').doc(widgetToken()).delete();
-      await userRef().delete();
-    }catch(e){ saveErr(e); }
-  };
 }
 
 /* 毛色の見本を描き、押したら選び直せるようにする（onPick で見本の外のネコも描き直せる） */
@@ -1130,14 +1221,16 @@ function bindColorPick(root, onPick){
    ウィジェット（Scriptable）
    ・設定でリンクを作ると、widgets/{秘密の番号} にまとめを置く。誰でも読めるが、番号を知らないと見つけられない
    ・まとめには、日割りを計算し直せる数字だけを入れる（記録の中身やメモは入れない）
-     今日つかえるお金 = through(今日) − spent。アプリを開かない日が続いても、ウィジェット側で正しく計算できる
+     今日つかえるお金 = 今日の分 ＋ 今期の浮き − 今日使った額。アプリを開かない日（＝記録のない日）は浮きに数えないので、
+     最後に開いた日の浮き（floatNow）に今日の分を足せば、ウィジェット側でも正しく出せる
    ========================================================= */
 let widgetLast = '';
 const widgetToken = () => FB.profile && FB.profile.widgetToken;
 function widgetData(c){
   return {
     uid: FB.user.uid, catName: data.catName, color: catColor(), level: c.level,
-    start: c.plan.start, end: c.cur.end, total: c.plan.total, budget: c.plan.budget, spent: c.cur.spent,
+    start: c.cur.start, end: c.cur.end, total: c.cur.days, budget: c.cur.amount, spent: c.cur.spent,
+    floatBefore: c.floatBefore, floatNow: c.float, spentToday: c.spentToday,
     streak: c.streak, updated: c.today,
   };
 }
@@ -1196,6 +1289,7 @@ if(!d){
 }else{
   const today = ymd(new Date());
   const through = s => s < d.start ? 0 : Math.floor(d.budget * Math.min(d.total, Math.round((day(s) - day(d.start)) / 864e5) + 1) / d.total);
+  const share = s => through(s) - through(ymd(new Date(day(s).getTime() - 864e5)));
   const top = w.addStack(); top.layoutHorizontally(); top.centerAlignContent();
   const left = top.addStack(); left.layoutVertically();
   const lbl = left.addText("今日つかえる"); lbl.font = Font.mediumRoundedSystemFont(11); lbl.textColor = C.soft;
@@ -1207,9 +1301,11 @@ if(!d){
     const a = w.addText("加算日だにゃ"); a.font = Font.boldRoundedSystemFont(18); a.textColor = C.ink;
     const b = w.addText("アプリを開いてね"); b.font = Font.systemFont(11); b.textColor = C.soft;
   }else{
-    const left2 = through(today) - d.spent;
+    // アプリを開いた日はその日の数字で。開いていない日（記録なし）は浮きに数えないので、最後の浮きに今日の分を足す
+    const fl = today === d.updated ? (d.floatBefore ?? 0) : (d.floatNow ?? 0);
+    const left2 = share(today) + fl - (today === d.updated ? (d.spentToday ?? 0) : 0);
     const a = w.addText(yen(left2)); a.font = Font.boldRoundedSystemFont(26); a.textColor = left2 < 0 ? C.minus : C.ink; a.minimumScaleFactor = .6; a.lineLimit = 1;
-    const b = w.addText("今期の残り " + yen(d.budget - d.spent)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
+    const b = w.addText((d.floatNow ?? 0) < 0 ? "今期の使いすぎ " + yen(-d.floatNow) : "今期の浮き " + yen(d.floatNow ?? 0)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
   }
   w.addSpacer();
   const btn = w.addStack(); btn.backgroundColor = C.accent; btn.cornerRadius = 12; btn.setPadding(6, 10, 6, 10); btn.centerAlignContent();
@@ -1255,8 +1351,14 @@ async function openWidgetSetup(){
 /* ウィジェットから開いたとき（#add）は、記録の画面をすぐ出す */
 let addHandled = false;
 window.addEventListener('hashchange', () => { if(location.hash === '#add'){ addHandled = false; if(data) maybeOpenAdd(); } });
+let addWait = null, addWaited = false;
 function maybeOpenAdd(){
   if(addHandled || location.hash !== '#add' || document.querySelector('.sheet')) return;
+  // 振り返りやプレゼントが先。それらはサーバーから届いてから出るので、届くまで少し（最大3秒）待つ
+  if(!(FB.profileLive && FB.entriesLive) && navigator.onLine !== false && !addWaited){
+    if(!addWait) addWait = setTimeout(() => { addWaited = true; if(data) maybeOpenAdd(); }, 3000);
+    return;
+  }
   addHandled = true;
   history.replaceState(null, '', location.pathname + location.search);
   openEntry();
@@ -1266,13 +1368,14 @@ function maybeOpenAdd(){
    部品
    ========================================================= */
 /* 下から出る画面。閉じ方は ✕ ボタン・外側を押す・下へスワイプ・Esc キー */
-function openSheet(html){
+function openSheet(html, onClose){
   const scrim = document.createElement('div'); scrim.className = 'scrim';
   const sheet = document.createElement('div'); sheet.className = 'sheet';
   sheet.setAttribute('role', 'dialog');
   sheet.innerHTML = '<div class="grip"></div><button class="sheet-x" aria-label="閉じる">✕</button>' + html;
   const onKey = e => { if(e.key === 'Escape') close(); };
-  const close = () => { scrim.remove(); sheet.remove(); document.removeEventListener('keydown', onKey); };
+  let closed = false;
+  const close = () => { if(closed) return; closed = true; scrim.remove(); sheet.remove(); document.removeEventListener('keydown', onKey); if(onClose) onClose(); };
   scrim.onclick = close;
   sheet.querySelector('.sheet-x').onclick = close;
   document.addEventListener('keydown', onKey);
