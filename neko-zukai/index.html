@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261112a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261112a">
-<link rel="manifest" href="manifest.webmanifest?v=20261112a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261114a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261114a">
+<link rel="manifest" href="manifest.webmanifest?v=20261114a">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -278,8 +278,8 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261112a"></script>
-<script src="breeds/breeds.js?v=20261112a"></script>
+<script src="cat.js?v=20261114a"></script>
+<script src="breeds/breeds.js?v=20261114a"></script>
 
 <script>
 (() => {
@@ -1045,14 +1045,20 @@ function openEntry(edit, presetDate){
       <button class="key fn" data-k="bs" aria-label="1文字けす">⌫</button>
     </div>
     <button class="btn" id="save">記録する</button>
+    ${edit ? '' : '<button class="btn ghost" id="zero" style="margin-top:8px">この日は使わなかった</button>'}
     ${edit ? '<button class="btn ghost" id="del" style="margin-top:8px;color:var(--minus)">この記録を消す</button>' : ''}
   `);
   const $val = sheet.querySelector('#val'), $save = sheet.querySelector('#save');
-  const $date = sheet.querySelector('#date'), $dtxt = sheet.querySelector('#date-txt');
+  const $date = sheet.querySelector('#date'), $dtxt = sheet.querySelector('#date-txt'), $zero = sheet.querySelector('#zero');
   const paint = () => {
     $val.textContent = val ? Number(val).toLocaleString('ja-JP') : '0';
     $save.disabled = !val && !edit;
     $dtxt.textContent = date === todayStr() ? '今日' : md(date);
+    // 「使わなかった」は、その日にまだ記録がないときだけ（日付を変えたら出し直す）
+    if($zero){
+      $zero.hidden = data.entries.some(e => e.date === date);
+      $zero.textContent = date === todayStr() ? '今日は使わなかった' : md(date) + ' は使わなかった';
+    }
   };
   $date.value = date;
   $date.onchange = () => { if($date.value) date = $date.value; paint(); };
@@ -1075,6 +1081,7 @@ function openEntry(edit, presetDate){
     if(edit){ updateEntry(edit.id, { amount, memo, date }); toast('なおしたにゃ'); }
     else { say(pick(LINES.saved)); addEntry({ date, amount, memo }); }
   };
+  if($zero) $zero.onclick = () => { close(); say(pick(LINES.zero)); addEntry({ date, amount: 0, memo: '' }); };
   const del = sheet.querySelector('#del');
   if(del) del.onclick = () => {
     if(!confirm('この記録を消しますか？')) return;
