@@ -1,0 +1,9 @@
+# 使っている部品（GitHub Actions など）に更新が出たら、更新のプルリクエストを出してもらう
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7

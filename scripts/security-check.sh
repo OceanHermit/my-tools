@@ -79,6 +79,14 @@ mails=$(git grep --cached -I -n -o -E '[A-Za-z0-9._%+-]+@(gmail|yahoo|icloud|out
 tels=$(git grep --cached -I -n -o -E '0[789]0-?[0-9]{4}-?[0-9]{4}' -- '*.html' '*.js' '*.json' '*.md' "${EXCLUDE[@]}" 2>/dev/null | head -5)
 [ -n "$tels" ] && { warn "携帯電話番号らしきものがある（公開してよいか確認）:"; echo "$tels" | sed 's/^/     /'; }
 
+# ---- 6. 公開フォルダに置くべきでない文書・データファイル（警告） ------------
+docs=$(git ls-files --cached | grep -iE '\.(pdf|xlsx?|xlsm|csv|tsv|docx?|zip|7z|sql|db|sqlite3?|bak|dump|log)$')
+[ -n "$docs" ] && { warn "文書・データファイルがある（リポジトリ全体が公開される。個人情報が入っていないか確認）:"; echo "$docs" | sed 's/^/     /'; }
+
+# ---- 7. バージョンが固定されていない外部の JS（警告） ---------------------
+unpinned=$(git grep --cached -I -n -o -E 'src="https://(unpkg\.com|cdn\.jsdelivr\.net/npm)/(@[a-z0-9_.-]+/)?[a-z0-9_.-]+(@[0-9]+(\.[0-9]+)?)?/[^"]*"|src="https://cdn\.tailwindcss\.com[^"]*"' -- '*.html' "${EXCLUDE[@]}" 2>/dev/null)
+[ -n "$unpinned" ] && { warn "バージョンが固定されていない外部の JS がある（勝手に中身が変わる。例: react@18 → react@18.3.1）:"; echo "$unpinned" | sed 's/^/     /'; }
+
 echo
 if [ "$errors" -gt 0 ]; then
   echo "セキュリティチェック: NG（エラー ${errors} 件 / 警告 ${warns} 件）。SECURITY.md を参照して直してから公開すること。"
