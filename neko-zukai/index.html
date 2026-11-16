@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116d">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116d">
-<link rel="manifest" href="manifest.webmanifest?v=20261116d">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116e">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116e">
+<link rel="manifest" href="manifest.webmanifest?v=20261116e">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -325,9 +325,9 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261116d"></script>
-<script src="yarn.js?v=20261116d"></script>
-<script src="breeds/breeds.js?v=20261116d"></script>
+<script src="cat.js?v=20261116e"></script>
+<script src="yarn.js?v=20261116e"></script>
+<script src="breeds/breeds.js?v=20261116e"></script>
 
 <script>
 (() => {
@@ -1203,11 +1203,11 @@ function settingsForm(v){
   return `
     <div class="form">
       <label>ネコの名前<input class="field" id="f-name" maxlength="12" value="${esc(v.catName)}" placeholder="例: ミケ"></label>
-      <div class="color-pick" role="radiogroup" aria-label="ネコの種類">
+      ${v.setup ? `<div class="color-pick" role="radiogroup" aria-label="ネコの種類">
         <span class="color-lbl">ネコの種類${allBreeds().length ? `<small>プレゼントで ${ownedBreeds().length} / ${allBreeds().length} 種類</small>` : ''}</span>
         <div class="color-opts ${catKinds().length > 2 ? 'many' : ''}">${catKinds().map(c => `<button type="button" class="color-opt ${c.id === v.color ? 'on' : ''}" data-color="${c.id}" role="radio" aria-checked="${c.id === v.color}">
           <span class="color-cat" data-cat="${c.id}"></span><span>${c.name}</span></button>`).join('')}</div>
-      </div>
+      </div>` : ''}
       <label>毎月自由に使えるお金
         <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${v.amount || ''}" placeholder="30000"></div>
       </label>
@@ -1296,7 +1296,7 @@ function openSettings(){
   const { sheet, close } = openSheet(`
     <h3>設定</h3>
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
-    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。
+    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。ネコを変えるときは「図鑑」のタブからだにゃ。
       ${pending ? `<br>いまは 毎月 ${yen(now.amount)}・${now.payday}日。${md(c0.next)} から上の内容になるにゃ` : ''}</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
     <button class="btn ghost" id="s-widget" style="margin-top:14px">ホーム画面のウィジェットを設定する</button>
@@ -1305,10 +1305,8 @@ function openSettings(){
       <button class="btn ghost" id="s-out">ログアウト</button>
     </div>
   `);
-  bindColorPick(sheet);
   sheet.querySelector('#s-save').onclick = () => {
     const f = readForm(sheet, false);
-    if(!f.err && f.color !== catColor()) saveColor(f.color);
     if(f.err){ sheet.querySelector('#f-err').textContent = f.err; return; }
     const p = profileOf(data);
     p.catName = f.name;
@@ -1363,73 +1361,27 @@ function newToken(){
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   return Array.from(a, x => abc[x % abc.length]).join('');
 }
+/* Scriptable に貼るのは短い「読みこみ係」だけ。中身（widget/widget.js）は毎回サイトから読むので、
+   ウィジェットの見た目や計算を直しても、貼り直さなくてよい。読めないときは、前に読んだものを使う */
 function widgetScript(token){
-  return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う
+  return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う。中身は自動で新しくなる
 const TOKEN = "${token}";
-const KEY = "${firebaseConfig.apiKey}";
-const BASE = "https://oceanhermit.github.io/my-tools/neko-zukai/";
-const DOC = "https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/widgets/" + TOKEN + "?key=" + KEY;
-
-const C = { bg: new Color("#FFF6E9"), ink: new Color("#5A3E2B"), soft: new Color("#9A7B62"), minus: new Color("#C8553D"), accent: new Color("#E08A3C") };
-const yen = n => (n < 0 ? "−" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
-const pad = n => String(n).padStart(2, "0");
-const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-const day = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
-
-async function load(){
-  try{
-    const j = await new Request(DOC).loadJSON();
-    if(!j.fields) return null;
-    const o = {};
-    for(const [k, v] of Object.entries(j.fields)) o[k] = v.stringValue ?? Number(v.integerValue ?? v.doubleValue);
-    return o;
-  }catch(e){ return null; }
-}
-async function catImage(d){
-  const fm = FileManager.local(), path = fm.joinPath(fm.cacheDirectory(), "neko-" + d.color + "-" + d.level + ".png");
-  try{ const img = await new Request(BASE + "widget/cat-" + d.color + "-" + d.level + ".png").loadImage(); fm.writeImage(path, img); return img; }
-  catch(e){ return fm.fileExists(path) ? fm.readImage(path) : null; }
-}
-
-const d = await load();
-const w = new ListWidget();
-w.backgroundColor = C.bg;
-w.setPadding(12, 12, 10, 12);
-w.url = BASE + "#add";
-w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
-
-if(!d){
-  const t = w.addText("NEKO-ZUKAI"); t.font = Font.boldRoundedSystemFont(14); t.textColor = C.ink;
-  w.addSpacer(6);
-  const m = w.addText("読みこめなかったにゃ。電波を確かめてね"); m.font = Font.systemFont(11); m.textColor = C.soft;
+const SRC = "https://oceanhermit.github.io/my-tools/neko-zukai/widget/widget.js";
+const fm = FileManager.local(), path = fm.joinPath(fm.documentsDirectory(), "neko-zukai-widget.js");
+try{
+  const code = await new Request(SRC + "?t=" + Date.now()).loadString();
+  if(code.includes("module.exports")) fm.writeString(path, code);
+}catch(e){}
+if(fm.fileExists(path)){
+  let run;
+  try{ run = importModule(path); }
+  catch(e){ const m = {}; new Function("module", fm.readString(path))(m); run = m.exports; }
+  await run(TOKEN);
 }else{
-  const today = ymd(new Date());
-  const through = s => s < d.start ? 0 : Math.floor(d.budget * Math.min(d.total, Math.round((day(s) - day(d.start)) / 864e5) + 1) / d.total);
-  const share = s => through(s) - through(ymd(new Date(day(s).getTime() - 864e5)));
-  const top = w.addStack(); top.layoutHorizontally(); top.centerAlignContent();
-  const left = top.addStack(); left.layoutVertically();
-  const lbl = left.addText("今日つかえる"); lbl.font = Font.mediumRoundedSystemFont(11); lbl.textColor = C.soft;
-  top.addSpacer();
-  const img = await catImage(d);
-  if(img){ const im = top.addImage(img); im.imageSize = new Size(58, 56); }
-  w.addSpacer(2);
-  if(today > d.end){
-    const a = w.addText("加算日だにゃ"); a.font = Font.boldRoundedSystemFont(18); a.textColor = C.ink;
-    const b = w.addText("アプリを開いてね"); b.font = Font.systemFont(11); b.textColor = C.soft;
-  }else{
-    // アプリを開いた日はその日の数字で。開いていない日（記録なし）は浮きに数えないので、最後の浮きに今日の分を足す
-    const fl = today === d.updated ? (d.floatBefore ?? 0) : (d.floatNow ?? 0);
-    const left2 = share(today) + fl - (today === d.updated ? (d.spentToday ?? 0) : 0);
-    const a = w.addText(yen(left2)); a.font = Font.boldRoundedSystemFont(26); a.textColor = left2 < 0 ? C.minus : C.ink; a.minimumScaleFactor = .6; a.lineLimit = 1;
-    const b = w.addText("今期の残り " + yen(d.budget - d.spent)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
-  }
-  w.addSpacer();
-  const btn = w.addStack(); btn.backgroundColor = C.accent; btn.cornerRadius = 12; btn.setPadding(6, 10, 6, 10); btn.centerAlignContent();
-  btn.addSpacer();
-  const bt = btn.addText("＋ 記録する"); bt.font = Font.boldRoundedSystemFont(13); bt.textColor = Color.white();
-  btn.addSpacer();
+  const w = new ListWidget();
+  const t = w.addText("読みこめなかったにゃ。電波を確かめてね"); t.font = Font.systemFont(12);
+  if(config.runsInWidget) Script.setWidget(w); else await w.presentSmall();
 }
-if(config.runsInWidget) Script.setWidget(w); else await w.presentSmall();
 Script.complete();
 `;
 }
@@ -1448,13 +1400,14 @@ async function openWidgetSetup(){
     <ol class="steps">
       <li>App Store で「Scriptable」（無料）を入れる</li>
       <li>下のボタンでスクリプトをコピーする</li>
-      <li>Scriptable を開き、右上の「＋」→ 貼り付け → 上の名前を「NEKO-ZUKAI」にする</li>
+      <li>Scriptable を開き、右上の「＋」→ 貼り付け → 上の名前を「NEKO-ZUKAI」にする<br>（前に作ったものがあるときは、それを開いて中身をぜんぶ消してから貼る）</li>
       <li>ホーム画面を長押し →「＋」→ Scriptable → いちばん小さいサイズを追加</li>
       <li>追加したウィジェットを長押し →「ウィジェットを編集」→ Script で「NEKO-ZUKAI」を選ぶ</li>
     </ol>
     <button class="btn" id="w-copy">スクリプトをコピー</button>
     <p class="note" style="text-align:left">ウィジェットを押すと、Safari で記録の画面が開くにゃ。はじめて開くときだけ、Safari でもログインしてね。<br>
-      スクリプトには、あなた専用の秘密の番号が入っているので、ほかの人に渡さないでね。</p>`);
+      スクリプトには、あなた専用の秘密の番号が入っているので、ほかの人に渡さないでね。<br>
+      このスクリプトは、新しい中身を自動で読みこむにゃ。これからは貼り直さなくていいにゃ。</p>`);
   sheet.querySelector('#w-copy').onclick = async () => {
     try{ await navigator.clipboard.writeText(script); toast('コピーしたにゃ'); }
     catch(e){
