@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116a">
-<link rel="manifest" href="manifest.webmanifest?v=20261116a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116b">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116b">
+<link rel="manifest" href="manifest.webmanifest?v=20261116b">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -79,6 +79,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .lv-name{font-size:13px;color:var(--soft)}
 .lv-name b{color:var(--accent);font-weight:900}
 .lv-next{font-size:12px;color:var(--soft);margin-top:6px}
+.stage-row{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%}
+.meter{flex:0 0 auto;width:96px;text-align:center;margin-bottom:10px}
+.meter svg{display:block;margin:0 auto}
+.meter-t{font-size:10.5px;color:var(--soft);line-height:1.35;font-weight:700}
+.meter-t b{display:block;font-size:15px;color:var(--ink);font-weight:900}
 .miss{font-size:12px;color:var(--soft);text-align:center;margin:8px 0 0}
 .wish{display:block;width:100%;text-align:left;background:var(--bg);border:0;border-radius:14px;padding:10px 12px;margin-top:8px;font:inherit;color:inherit;cursor:pointer}
 .wish.ready{outline:2px solid var(--accent)}
@@ -278,8 +283,9 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261116a"></script>
-<script src="breeds/breeds.js?v=20261116a"></script>
+<script src="cat.js?v=20261116b"></script>
+<script src="yarn.js?v=20261116b"></script>
+<script src="breeds/breeds.js?v=20261116b"></script>
 
 <script>
 (() => {
@@ -445,7 +451,8 @@ function configAt(s){
    ・期間の予算は毎月の額だけ。余りもマイナスも次の期間へ持ちこさず、加算日に「貯金」へ入る
    ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後から入れた日も数える）
    ・1週間をすぎてから入れた日は、連続記録とプレゼントの「記録した日」にだけ数えない
-   ・ネコの段階 = 今期の浮きが「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
+   ・ネコの段階 = 「今日つかえるお金」が「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
+   ・段階の名前は画面に出さない（絵と「次のレベルまで」のメーターで伝える）。名前はコードと設計書の中だけの呼び名
    ========================================================= */
 const LATE_DAYS = 7;          // 連続記録などに数える後入れは、その日から1週間まで
 const GIFT_RATE = .8;         // プレゼントには、期間の8割以上の日に記録が要る
@@ -512,18 +519,20 @@ function compute(){
   let missing = 0;   // この1週間で、まだ記録のない日（後入れできる）
   for(let i = 1; i <= LATE_DAYS; i++){ const s = ymd(addDays(parse(today), -i)); if(s >= cur.start && spentBy[s] === undefined) missing++; }
 
+  // いまの段階は、画面に出ている「今日つかえるお金」で決める（締めた期間は、最後の日の残り＝その期間の浮き）
+  const todayLeft = cur.shareToday + cur.floatBefore - spentToday;
+  cur.level = levelOf(todayLeft, cur.unit);
   return {
     today, cur, periods, savings, stamps, lateDays, missing, spentToday,
     recordedToday: spentBy[today] !== undefined,
     share: cur.shareToday, floatBefore: cur.floatBefore, float: cur.float,
-    todayLeft: cur.shareToday + cur.floatBefore - spentToday,
-    level: cur.level, toNext: toNextLevel(cur.float, cur.unit),
+    todayLeft, level: cur.level, toNext: toNextLevel(todayLeft, cur.unit), meter: meterOf(todayLeft, cur.unit),
     daysLeft: dayDiff(parse(cur.next), parse(today)), next: cur.next,
     ...streakOf(counted, spentBy, today),
   };
 }
 
-/* ネコの段階。今期の浮きが 1日ぶん（unit）の何日ぶんか */
+/* ネコの段階。今日つかえるお金が 1日ぶん（unit）の何日ぶんか */
 const LEVELS = [
   { name: 'ぼさぼさ' },            // マイナス3日ぶんより下
   { name: 'ふつう' },
@@ -539,7 +548,16 @@ function levelOf(float, unit){
   for(let i = 2; i < LEVELS.length; i++) if(float >= LEVELS[i].min * unit) lv = i;
   return lv;
 }
-/* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら浮かせればよいか */
+/* 次のレベルまでの進み（0〜1）。毛糸玉メーターの大きさに使う */
+function meterOf(x, unit){
+  if(!(unit > 0)) return 0;
+  const lv = levelOf(x, unit), d = x / unit;
+  if(lv === 0) return Math.max(0, Math.min(1, 1 - (LEVEL_LOW - d) / 3));   // もとに戻るまで。3日ぶん下で空
+  if(lv === LEVELS.length - 1) return 1;
+  const lo = lv === 1 ? LEVEL_LOW : LEVELS[lv].min, hi = LEVELS[lv + 1].min;
+  return Math.max(0, Math.min(1, (d - lo) / (hi - lo)));
+}
+/* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら要るか */
 function toNextLevel(float, unit){
   const lv = levelOf(float, unit);
   if(lv === 0) return Math.ceil(LEVEL_LOW * unit - float);
@@ -604,6 +622,7 @@ const say = text => { said = { text, until: Date.now() + 4000 }; };
 /* 表情が変わらない間は、せりふを毎回くじ引きし直さない */
 let moodMemo = { face: '', line: '' };
 
+let shownLevel = null;   // 前に描いたときのレベル
 function render(){
   if(FB.state === 'loading') return renderMessage('準備しているにゃ…');
   if(FB.state === 'error') return renderMessage(FB.msg, 'sad', true);
@@ -612,6 +631,9 @@ function render(){
   // 初期設定の入力中は、同期が届いても描き直さない（打ちかけが消えるので）
   if(!data){ if(!migrating && !$app.querySelector('#f-name')) renderSetup(); return; }
   const c = compute();
+  // レベルが変わったら、名前は出さずにひとこと
+  if(shownLevel && shownLevel.start === c.cur.start && shownLevel.lv !== c.level) say(c.level > shownLevel.lv ? 'レベルが上がったにゃ！' : 'レベルが下がっちゃったにゃ…');
+  shownLevel = { start: c.cur.start, lv: c.level };
   const mood = moodOf(c);
   if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
   const line = said.until > Date.now() ? said.text : moodMemo.line;
@@ -635,11 +657,17 @@ function render(){
     <section class="today">
       <div class="lbl">今日つかえるお金</div>
       <div class="amt num ${c.todayLeft < 0 ? 'minus' : ''}">${yen(c.todayLeft)}</div>
-      <div class="sub">今日の分 <b class="num">${yen(c.share)}</b> ${c.floatBefore >= 0 ? '＋ 今期の浮き' : '− 今期の使いすぎ'} <b class="num">${yen(Math.abs(c.floatBefore))}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
+      <div class="sub">${c.recordedToday ? `今日 使った <b class="num">${yen(c.spentToday)}</b>` : '今日はまだ記録していないにゃ'}</div>
     </section>
 
     <section class="stage">
-      <div id="cat-slot"></div>
+      <div class="stage-row">
+        <div id="cat-slot"></div>
+        <div class="meter" aria-label="${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上のレベル'} ${c.toNext ? yen(c.toNext) : ''}">
+          ${nekoYarn(c.level, c.meter, 96)}
+          <div class="meter-t">${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上の<br>レベルだにゃ'}${c.toNext ? `<b class="num">${yen(c.toNext)}</b>` : ''}</div>
+        </div>
+      </div>
       <div class="bubble" id="bubble"><span class="who">${esc(data.catName)}</span><span id="line">${esc(line)}</span></div>
     </section>
 
@@ -657,19 +685,9 @@ function render(){
       </div>
     </section>
 
-    <section class="card save">
-      <div class="save-top"><h2 style="margin:0">今期の浮き</h2><span class="v num ${c.float < 0 ? 'minus' : ''}">${yen(c.float)}</span></div>
-      <div class="lv-name">${esc(data.catName)}は いま <b>${LEVELS[c.level].name}</b></div>
-      <div class="lv-steps">${LEVELS.map((_, i) => `<i class="${i <= c.level && c.level > 0 ? 'on' : ''}"></i>`).join('')}</div>
-      <div class="lv-next">${c.level === 0 ? `あと ${yen(c.toNext)} 浮かせると「ふつう」に戻るにゃ`
-        : c.level < LEVELS.length - 1 ? `あと ${yen(c.toNext)} 浮かせると「${LEVELS[c.level + 1].name}」になるにゃ`
-        : 'このまま期間を終えると、プレゼントがもらえるにゃ'}</div>
-      <div class="lv-next">記録した日 ${c.cur.rec} / ${c.cur.days}日（プレゼントには ${giftNeed}日以上）</div>
-    </section>
-
     <section class="card">
       <div class="save-top"><h2 style="margin:0">貯金</h2><span class="v num ${c.savings < 0 ? 'minus' : ''}">${yen(c.savings)}</span></div>
-      <div class="lv-next">加算日に、今期の浮きがここに入るにゃ。ほしいものを買うときに使うにゃ</div>
+      <div class="lv-next">加算日に、今期の残りがここに入るにゃ。ほしいものを買うときに使うにゃ</div>
       ${wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${w.id}">
         <span class="wish-top"><span class="wish-n">${i + 1}. ${esc(w.name)}</span><span class="num">${w.ready ? '買えるにゃ！' : `${yen(w.got)} / ${yen(w.price)}`}</span></span>
         <span class="bar"><i style="width:${Math.round(w.got / w.price * 100)}%"></i></span></button>`).join('')}
@@ -688,6 +706,7 @@ function render(){
         <div><div class="k">今期使った額</div><div class="v num">${yen(c.cur.spent)}</div></div>
       </div>
       <div class="bar ${remaining < 0 ? 'minus' : ''}"><i style="width:${usedPct}%"></i></div>
+      <div class="lv-next">記録した日 ${c.cur.rec} / ${c.cur.days}日。いちばん上のレベルで期間を終えて、${giftNeed}日以上記録していると、プレゼントがもらえるにゃ</div>
     </section>
 
     <section class="card">
@@ -751,11 +770,11 @@ function maybeReview(c){
     <div class="review">
       <div id="rv-cat"></div>
       <p>${md(last.start)} 〜 ${md(last.end)} の振り返り</p>
-      <div class="big num ${f < 0 ? 'minus' : ''}">${f >= 0 ? yen(f) + ' 浮いたにゃ！' : yen(-f) + ' 使いすぎたにゃ…'}</div>
-      <p>${f > 0 ? '浮いた分は貯金に入れたにゃ。' : f < 0 ? '使いすぎた分は貯金から引いたにゃ。' : ''}貯金は ${yen(c.savings)} になったにゃ</p>
-      <p>記録した日 ${last.rec} / ${last.days}日・「${LEVELS[last.level].name}」で終えたにゃ</p>
-      ${before ? `<p>その前の期間より ${diff >= 0 ? yen(diff) + ' 多く' : yen(-diff) + ' 少なく'}浮いたにゃ</p>` : ''}
-      ${last.gift ? '<div class="up">液体ネコで終えたごほうびがあるにゃ！</div>'
+      <div class="big num ${f < 0 ? 'minus' : ''}">${f >= 0 ? yen(f) + ' のこったにゃ！' : yen(-f) + ' 使いすぎたにゃ…'}</div>
+      <p>${f > 0 ? 'のこった分は貯金に入れたにゃ。' : f < 0 ? '使いすぎた分は貯金から引いたにゃ。' : ''}貯金は ${yen(c.savings)} になったにゃ</p>
+      <p>記録した日 ${last.rec} / ${last.days}日</p>
+      ${before ? `<p>その前の期間より ${diff >= 0 ? yen(diff) + ' 多く' : yen(-diff) + ' 少なく'}のこったにゃ</p>` : ''}
+      ${last.gift ? '<div class="up">いちばん上のレベルで終えたごほうびがあるにゃ！</div>'
         : last.level === 4 ? '<div class="up">記録が8割にとどかなかったので、プレゼントはおあずけにゃ</div>' : ''}
       <button class="btn" id="rv-ok" style="margin-top:18px">${f >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
     </div>`, afterSheets);
@@ -788,7 +807,7 @@ function maybeGift(c){
   if(!p) return;
   const { sheet, close } = openSheet(`
     <div class="review gift">
-      <p>${md(p.start)} 〜 ${md(p.end)} を、液体ネコで終えたごほうびだにゃ</p>
+      <p>${md(p.start)} 〜 ${md(p.end)} を、いちばん上のレベルで終えたごほうびだにゃ</p>
       <button class="gift-box" id="gift-open" aria-label="プレゼントを開ける">
         <svg viewBox="0 0 120 120" width="150" height="150"><rect x="18" y="52" width="84" height="56" rx="8" fill="#F3B76C" stroke="#5A3E2B" stroke-width="4"/>
           <rect x="12" y="34" width="96" height="24" rx="8" fill="#F6C98C" stroke="#5A3E2B" stroke-width="4"/>
@@ -833,12 +852,12 @@ function maybeGift(c){
 /* これまでの期間の一覧 */
 function openHistory(c){
   const rows = c.periods.slice().reverse().map(p =>
-    `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${p.float >= 0 ? 'plus' : 'minus'}">${p.float >= 0 ? '+' : ''}${yen(p.float)}</td><td class="num">${p.rec}/${p.days}日</td><td>${LEVELS[p.level].name}</td></tr>`).join('');
+    `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${p.float >= 0 ? 'plus' : 'minus'}">${p.float >= 0 ? '+' : ''}${yen(p.float)}</td><td class="num">${p.rec}/${p.days}日</td></tr>`).join('');
   const bought = (data.wishes || []).filter(w => w.bought);
   openSheet(`
     <h3>これまでの振り返り</h3>
-    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>浮き</th><th>記録</th><th>終わり</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note" style="text-align:left">「浮き」は、記録した日の（その日の分 − 使った額）の合計だにゃ。加算日に貯金へ入るにゃ</p>
+    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>のこり</th><th>記録</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note" style="text-align:left">「のこり」は、期間の終わりに残っていたお金だにゃ（記録した日のぶんだけ数えるにゃ）。加算日に貯金へ入るにゃ</p>
     ${bought.length ? `<h3 style="margin-top:18px">貯金で買ったもの</h3>${bought.map(w => `<div class="day-h" style="padding:6px 0"><span>${md(w.bought)}　${esc(w.name)}</span><span class="num">${yen(w.price)}</span></div>`).join('')}` : ''}`);
 }
 
@@ -1313,7 +1332,7 @@ if(!d){
     const fl = today === d.updated ? (d.floatBefore ?? 0) : (d.floatNow ?? 0);
     const left2 = share(today) + fl - (today === d.updated ? (d.spentToday ?? 0) : 0);
     const a = w.addText(yen(left2)); a.font = Font.boldRoundedSystemFont(26); a.textColor = left2 < 0 ? C.minus : C.ink; a.minimumScaleFactor = .6; a.lineLimit = 1;
-    const b = w.addText((d.floatNow ?? 0) < 0 ? "今期の使いすぎ " + yen(-d.floatNow) : "今期の浮き " + yen(d.floatNow ?? 0)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
+    const b = w.addText("今期の残り " + yen(d.budget - d.spent)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
   }
   w.addSpacer();
   const btn = w.addStack(); btn.backgroundColor = C.accent; btn.cornerRadius = 12; btn.setPadding(6, 10, 6, 10); btn.centerAlignContent();
