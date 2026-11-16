@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116b">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116b">
-<link rel="manifest" href="manifest.webmanifest?v=20261116b">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116c">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116c">
+<link rel="manifest" href="manifest.webmanifest?v=20261116c">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -80,8 +80,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .lv-name b{color:var(--accent);font-weight:900}
 .lv-next{font-size:12px;color:var(--soft);margin-top:6px}
 .stage-row{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%}
-.meter{flex:0 0 auto;width:96px;text-align:center;margin-bottom:10px}
-.meter svg{display:block;margin:0 auto}
+.meter{flex:0 0 auto;width:104px;text-align:center;margin:0 0 6px -14px}
+.meter svg{display:block;margin:4px auto 0}
 .meter-t{font-size:10.5px;color:var(--soft);line-height:1.35;font-weight:700}
 .meter-t b{display:block;font-size:15px;color:var(--ink);font-weight:900}
 .miss{font-size:12px;color:var(--soft);text-align:center;margin:8px 0 0}
@@ -283,9 +283,9 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261116b"></script>
-<script src="yarn.js?v=20261116b"></script>
-<script src="breeds/breeds.js?v=20261116b"></script>
+<script src="cat.js?v=20261116c"></script>
+<script src="yarn.js?v=20261116c"></script>
+<script src="breeds/breeds.js?v=20261116c"></script>
 
 <script>
 (() => {
@@ -526,7 +526,7 @@ function compute(){
     today, cur, periods, savings, stamps, lateDays, missing, spentToday,
     recordedToday: spentBy[today] !== undefined,
     share: cur.shareToday, floatBefore: cur.floatBefore, float: cur.float,
-    todayLeft, level: cur.level, toNext: toNextLevel(todayLeft, cur.unit), meter: meterOf(todayLeft, cur.unit),
+    todayLeft, level: cur.level, toNext: toNextLevel(todayLeft, cur.unit),
     daysLeft: dayDiff(parse(cur.next), parse(today)), next: cur.next,
     ...streakOf(counted, spentBy, today),
   };
@@ -547,15 +547,6 @@ function levelOf(float, unit){
   let lv = 1;
   for(let i = 2; i < LEVELS.length; i++) if(float >= LEVELS[i].min * unit) lv = i;
   return lv;
-}
-/* 次のレベルまでの進み（0〜1）。毛糸玉メーターの大きさに使う */
-function meterOf(x, unit){
-  if(!(unit > 0)) return 0;
-  const lv = levelOf(x, unit), d = x / unit;
-  if(lv === 0) return Math.max(0, Math.min(1, 1 - (LEVEL_LOW - d) / 3));   // もとに戻るまで。3日ぶん下で空
-  if(lv === LEVELS.length - 1) return 1;
-  const lo = lv === 1 ? LEVEL_LOW : LEVELS[lv].min, hi = LEVELS[lv + 1].min;
-  return Math.max(0, Math.min(1, (d - lo) / (hi - lo)));
 }
 /* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら要るか */
 function toNextLevel(float, unit){
@@ -664,8 +655,8 @@ function render(){
       <div class="stage-row">
         <div id="cat-slot"></div>
         <div class="meter" aria-label="${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上のレベル'} ${c.toNext ? yen(c.toNext) : ''}">
-          ${nekoYarn(c.level, c.meter, 96)}
           <div class="meter-t">${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上の<br>レベルだにゃ'}${c.toNext ? `<b class="num">${yen(c.toNext)}</b>` : ''}</div>
+          ${nekoYarn(c.level, 104)}
         </div>
       </div>
       <div class="bubble" id="bubble"><span class="who">${esc(data.catName)}</span><span id="line">${esc(line)}</span></div>
