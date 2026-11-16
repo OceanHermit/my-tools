@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261114a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261114a">
-<link rel="manifest" href="manifest.webmanifest?v=20261114a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116a">
+<link rel="manifest" href="manifest.webmanifest?v=20261116a">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -278,8 +278,8 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261114a"></script>
-<script src="breeds/breeds.js?v=20261114a"></script>
+<script src="cat.js?v=20261116a"></script>
+<script src="breeds/breeds.js?v=20261116a"></script>
 
 <script>
 (() => {
@@ -443,10 +443,11 @@ function configAt(s){
 /* =========================================================
    計算（決まりは DESIGN.md 第3部）
    ・期間の予算は毎月の額だけ。余りもマイナスも次の期間へ持ちこさず、加算日に「貯金」へ入る
-   ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後入れは1週間前まで）
+   ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後から入れた日も数える）
+   ・1週間をすぎてから入れた日は、連続記録とプレゼントの「記録した日」にだけ数えない
    ・ネコの段階 = 今期の浮きが「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
    ========================================================= */
-const LATE_DAYS = 7;          // 後入れを数えるのは、その日から1週間まで
+const LATE_DAYS = 7;          // 連続記録などに数える後入れは、その日から1週間まで
 const GIFT_RATE = .8;         // プレゼントには、期間の8割以上の日に記録が要る
 const dayDiff = (a, b) => Math.round((a - b) / 864e5);
 
@@ -478,7 +479,7 @@ function compute(){
   // 数える日 = 記録があり、その日から1週間以内に最初の記録を入れた日
   const counted = s => spentBy[s] !== undefined && firstAt[s] < addDays(parse(s), LATE_DAYS + 1).getTime();
 
-  const all = periodsUntil(today), stamps = {};
+  const all = periodsUntil(today), stamps = {}, lateDays = new Set();
   let savings = 0;
   for(const p of all){
     let float = 0, spent = 0, rec = 0, d = parse(p.start);
@@ -491,11 +492,11 @@ function compute(){
       const sp = spentBy[s];
       if(sp === undefined) continue;
       spent += sp;
-      if(counted(s)){
-        rec++;
-        stamps[s] = sp === 0 ? 'zero' : sp <= share + Math.max(0, float) ? 'good' : 'over';
-        float += share - sp;
-      } else stamps[s] = 'late';
+      // お金の計算（浮き・貯金・ネコの段階）には、いつ入れた記録でも数える
+      stamps[s] = sp === 0 ? 'zero' : sp <= share + Math.max(0, float) ? 'good' : 'over';
+      float += share - sp;
+      // 記録の習慣（連続記録・プレゼントの「記録した日」）は、1週間以内に入れた日だけ
+      if(counted(s)) rec++; else lateDays.add(s);
     }
     p.float = float; p.spent = spent; p.rec = rec; p.level = levelOf(float, p.unit);
     p.closed = p.end < today;
@@ -512,7 +513,7 @@ function compute(){
   for(let i = 1; i <= LATE_DAYS; i++){ const s = ymd(addDays(parse(today), -i)); if(s >= cur.start && spentBy[s] === undefined) missing++; }
 
   return {
-    today, cur, periods, savings, stamps, missing, spentToday,
+    today, cur, periods, savings, stamps, lateDays, missing, spentToday,
     recordedToday: spentBy[today] !== undefined,
     share: cur.shareToday, floatBefore: cur.floatBefore, float: cur.float,
     todayLeft: cur.shareToday + cur.floatBefore - spentToday,
@@ -645,7 +646,7 @@ function render(){
     <div class="actions">
       <button class="btn" id="open-entry">🐾 使ったお金を入れる</button>
       ${c.recordedToday ? '' : '<button class="btn ghost" id="zero-day">今日は使わなかった</button>'}
-      ${c.missing ? `<p class="miss">記録していない日が ${c.missing}日あるにゃ。1週間以内なら、カレンダーから入れられるにゃ</p>` : ''}
+      ${c.missing ? `<p class="miss">記録していない日が ${c.missing}日あるにゃ。カレンダーから入れられるにゃ</p>` : ''}
     </div>
 
     <section class="streak">
@@ -845,14 +846,14 @@ function openHistory(c){
 function openDay(date, c){
   const list = data.entries.filter(e => e.date === date).sort((a, b) => b.at - a.at);
   const tooOld = date < ymd(addDays(parse(c.today), -LATE_DAYS));
-  const late = c.stamps[date] === 'late' || (!list.length && tooOld);
+  const late = c.lateDays.has(date) || (!list.length && tooOld);
   if(!list.length && !late) return openEntry(null, date);
   const { sheet, close } = openSheet(`
     <h3>${md(date)} の記録</h3>
     ${list.length ? list.map(e => `<button class="ent" data-id="${e.id}">
       <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
       <span class="yen num">${yen(e.amount)}</span></button>`).join('') : '<p class="empty">この日の記録はないにゃ</p>'}
-    ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、今期の浮きや連続記録には数えないにゃ（記録として残すことはできるにゃ）</p>' : ''}
+    ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、お金の計算には入るけど、連続記録とプレゼントの「記録した日」には数えないにゃ</p>' : ''}
     <button class="btn" id="day-add" style="margin-top:12px">この日に記録を足す</button>`);
   sheet.querySelectorAll('.ent').forEach(b => b.onclick = () => { close(); openEntry(data.entries.find(e => e.id === b.dataset.id)); });
   sheet.querySelector('#day-add').onclick = () => { close(); openEntry(null, date); };
@@ -919,8 +920,8 @@ function openWish(id){
    カレンダー（肉球スタンプ）
    ========================================================= */
 const PAW = c => `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="26" rx="9" ry="8" fill="${c}"/><circle cx="9" cy="16" r="4" fill="${c}"/><circle cx="16" cy="9" r="4" fill="${c}"/><circle cx="24" cy="9" r="4" fill="${c}"/><circle cx="31" cy="16" r="4" fill="${c}"/></svg>`;
-const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E', late: '#EDE3D6' };
-const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった', late: '1週間すぎ（数えない）' };
+const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E' };
+const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった' };
 let calMonth = null;   // 'YYYY-MM'。null なら今月
 let seenStamps = null; // 前回描いたスタンプ。新しく押された日だけ動かす
 
