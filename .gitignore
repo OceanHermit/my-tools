@@ -16,3 +16,15 @@ npm-debug.log*
 
 # ローカル素材（配信不要・容量が大きいもの）
 assets-src/
+
+# 秘密情報（絶対にコミットしない。SECURITY.md 参照）
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+*firebase-adminsdk*.json
+credentials.json
