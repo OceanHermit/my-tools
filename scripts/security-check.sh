@@ -43,8 +43,16 @@ scan "サービスアカウントの鍵 (JSON)"       '"private_key"[[:space:]]*
 scan "Cloudflare / 汎用トークンらしき代入"  '(api[_-]?secret|secret[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret)["'\'' ]*[:=][[:space:]]*["'\''][A-Za-z0-9_\-]{20,}["'\'']'
 
 # Google の AIza キーは「Firebase の Web 設定（apiKey:）」としてだけ許す。
+# 同じ値なら別ファイル（ウィジェットの REST 呼び出しなど）で使っていてもよい。
 # それ以外（Gemini / Maps などの鍵を直書き）は止める。
-aiza=$(git grep --cached -I -n -E 'AIza[0-9A-Za-z_-]{30,}' -- . "${EXCLUDE[@]}" 2>/dev/null | grep -vE 'apiKey[[:space:]]*:' | cut -c1-160)
+fb_keys=$(git grep --cached -I -h -o -E 'apiKey[[:space:]]*:[[:space:]]*"AIza[0-9A-Za-z_-]{30,}"' -- . "${EXCLUDE[@]}" 2>/dev/null | grep -oE 'AIza[0-9A-Za-z_-]+' | sort -u)
+aiza=$(git grep --cached -I -n -E 'AIza[0-9A-Za-z_-]{30,}' -- . "${EXCLUDE[@]}" 2>/dev/null | grep -vE 'apiKey[[:space:]]*:' | while IFS= read -r line; do
+  bad=0
+  for k in $(echo "$line" | grep -oE 'AIza[0-9A-Za-z_-]{30,}'); do
+    echo "$fb_keys" | grep -qxF -- "$k" || bad=1
+  done
+  [ "$bad" = 1 ] && echo "$line" | cut -c1-160
+done)
 if [ -n "$aiza" ]; then
   err "Firebase 設定以外の場所に Google の API キー (AIza...) がある（Gemini・Maps 等の鍵は公開ページに置かない）:"
   echo "$aiza" | sed 's/^/     /'
@@ -84,7 +92,7 @@ docs=$(git ls-files --cached | grep -iE '\.(pdf|xlsx?|xlsm|csv|tsv|docx?|zip|7z|
 [ -n "$docs" ] && { warn "文書・データファイルがある（リポジトリ全体が公開される。個人情報が入っていないか確認）:"; echo "$docs" | sed 's/^/     /'; }
 
 # ---- 7. バージョンが固定されていない外部の JS（警告） ---------------------
-unpinned=$(git grep --cached -I -n -o -E 'src="https://(unpkg\.com|cdn\.jsdelivr\.net/npm)/(@[a-z0-9_.-]+/)?[a-z0-9_.-]+(@[0-9]+(\.[0-9]+)?)?/[^"]*"|src="https://cdn\.tailwindcss\.com[^"]*"' -- '*.html' "${EXCLUDE[@]}" 2>/dev/null)
+unpinned=$(git grep --cached -I -n -o -E 'src="https://(unpkg\.com|cdn\.jsdelivr\.net/npm)/(@[a-z0-9_.-]+/)?[a-z0-9_.-]+(@[0-9]+(\.[0-9]+)?)?/[^"]*"|src="https://cdn\.tailwindcss\.com/?(\?[^"]*)?"' -- '*.html' "${EXCLUDE[@]}" 2>/dev/null)
 [ -n "$unpinned" ] && { warn "バージョンが固定されていない外部の JS がある（勝手に中身が変わる。例: react@18 → react@18.3.1）:"; echo "$unpinned" | sed 's/^/     /'; }
 
 echo

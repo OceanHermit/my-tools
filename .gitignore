@@ -28,3 +28,6 @@ assets-src/
 *service-account*.json
 *firebase-adminsdk*.json
 credentials.json
+
+# Claude Code のサブエージェント用の作業コピー
+.claude/worktrees/
