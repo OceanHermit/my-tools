@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#FFF6E9">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261114a">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261114a">
-<link rel="manifest" href="manifest.webmanifest?v=20261114a">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=20261116e">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20261116e">
+<link rel="manifest" href="manifest.webmanifest?v=20261116e">
 <meta name="apple-mobile-web-app-title" content="NEKO-ZUKAI">
 <title>NEKO-ZUKAI — ネコと貯めるおこづかい帳</title>
 <meta name="description" content="毎月自由に使えるお金を決めて、毎日使った分を記録する。余りは次の月へ繰り越し。家ネコといっしょに続けるおこづかい帳。">
@@ -40,9 +40,51 @@ body{
   background:var(--bg);color:var(--ink);
   font-family:"Zen Maru Gothic",system-ui,sans-serif;
   font-size:15px;line-height:1.6;font-weight:500;
-  min-height:100vh;
+  position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
 }
-.wrap{max-width:480px;margin:0 auto;padding:0 16px calc(32px + env(safe-area-inset-bottom))}
+/* ページ全体は動かさない。ズームもさせない（pan だけ許す＝ピンチとダブルタップのズームなし） */
+html{height:100%;overflow:hidden;overscroll-behavior:none;touch-action:pan-x pan-y;-webkit-text-size-adjust:100%}
+input,textarea{-webkit-user-select:text;user-select:text}
+.wrap{max-width:480px;height:100%;margin:0 auto;padding:0 16px calc(32px + env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:none}
+/* ---- タブのある画面：上の帯・中身・下のタブ。中身が入りきらないタブだけ、中で動く ---- */
+.wrap.tabbed{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.wrap.tabbed header{flex:0 0 auto;padding:calc(10px + env(safe-area-inset-top)) 16px 2px}
+.page{flex:1 1 auto;min-height:0;padding:0 16px 10px;overflow-y:auto;overscroll-behavior:none;display:flex;flex-direction:column}
+.page > *{flex:0 0 auto}
+.page .card:first-child{margin-top:8px}
+.tabs{flex:0 0 auto;display:flex;background:var(--paper);border-top:1.5px solid var(--line);padding:4px 6px calc(4px + env(safe-area-inset-bottom))}
+.tab{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 0 3px;font-size:10.5px;font-weight:700;color:var(--soft);border-radius:12px}
+.tab svg{width:24px;height:24px}
+.tab.on{color:var(--accent-dark)}
+.tab.on svg{color:var(--accent)}
+/* ホーム：ネコが残りの高さに合わせて縮む */
+.page.home{overflow:hidden}
+.page.home .stage{flex:1 1 auto;min-height:0;justify-content:center}
+.page.home .cat{width:auto;height:min(220px, calc(100dvh - 500px));min-height:120px;aspect-ratio:240/230}
+.today-top{display:flex;align-items:center;justify-content:space-between}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--paper);border:1.5px solid var(--line);border-radius:99px;padding:2px 10px 2px 6px;font-size:12px;font-weight:700}
+.chip svg{width:18px;height:18px}
+.chip b{font-size:15px;font-weight:900}
+/* カレンダー・図鑑 */
+@media (max-height:720px){
+  .page.cal-page .cal-d{aspect-ratio:auto;height:34px}
+  .page.cal-page .card{padding:10px 14px;margin-top:8px}
+  .page.cal-page .stats{gap:4px 12px}
+  .page.cal-page .stats .v{font-size:16px}
+  .page.cal-page .bar{margin-top:8px}
+  .page.cal-page .lv-next{font-size:11px;margin-top:4px;line-height:1.4}
+}
+.page.cal-page .cal-d .n.mo{font-size:8px;font-weight:700;color:var(--accent-dark)}
+.scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;margin:8px -4px 0;padding:0 4px}
+.zukan{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:6px}
+.zk{border:1.5px solid var(--line);background:var(--paper);border-radius:16px;padding:6px 2px 6px;text-align:center;font-size:11px;font-weight:700;line-height:1.3;min-width:0}
+.zk .cat{width:100%;height:auto;cursor:inherit}
+.zk.on{border-color:var(--accent);background:var(--cream)}
+.zk.locked{color:var(--soft);font-weight:500}
+.zk .q{display:grid;place-items:center;aspect-ratio:240/230;font-size:34px;font-weight:900;color:var(--line)}
+.zk-h{display:flex;align-items:baseline;justify-content:space-between;margin-top:10px}
+.zk-h h2{font-size:14px;color:var(--soft)}
 .num{font-variant-numeric:tabular-nums}
 [hidden]{display:none!important}
 
@@ -54,7 +96,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .icon-btn:active{background:var(--cream)}
 
 /* ---- today ---- */
-.today{padding:6px 4px 0}
+.today{padding:2px 4px 0}
 .today .lbl{font-size:13px;color:var(--soft)}
 .today .amt{font-size:46px;font-weight:900;line-height:1.1;margin:2px 0 4px;letter-spacing:.01em}
 .today .amt.minus{color:var(--minus)}
@@ -79,7 +121,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .lv-name{font-size:13px;color:var(--soft)}
 .lv-name b{color:var(--accent);font-weight:900}
 .lv-next{font-size:12px;color:var(--soft);margin-top:6px}
-.miss{font-size:12px;color:var(--soft);text-align:center;margin:8px 0 0}
+.stage-row{display:flex;align-items:flex-end;justify-content:center;gap:2px;width:100%}
+.meter{flex:0 0 auto;width:104px;text-align:center;margin:0 0 6px -14px}
+.meter svg{display:block;margin:4px auto 0}
+.meter-t{font-size:10.5px;color:var(--soft);line-height:1.35;font-weight:700}
+.meter-t b{display:block;font-size:15px;color:var(--ink);font-weight:900}
+.btn.ghost.miss{font-size:12px;padding:4px}
 .wish{display:block;width:100%;text-align:left;background:var(--bg);border:0;border-radius:14px;padding:10px 12px;margin-top:8px;font:inherit;color:inherit;cursor:pointer}
 .wish.ready{outline:2px solid var(--accent)}
 .wish-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:6px}
@@ -100,11 +147,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .steps li{margin-bottom:4px}
 .color-pick{margin-top:14px}
 .color-lbl{display:block;font-size:13.5px;font-weight:700}
-.color-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
-.color-opt{border:2px solid var(--line);background:var(--paper);border-radius:14px;padding:6px 6px 8px;display:flex;flex-direction:column;align-items:center;font-size:13px;font-weight:700;color:var(--soft)}
+.color-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.color-opt{min-width:0;border:2px solid var(--line);background:var(--paper);border-radius:14px;padding:6px 6px 8px;display:flex;flex-direction:column;align-items:center;font-size:13px;font-weight:700;color:var(--soft)}
 .color-opt .cat{width:100%;height:auto;aspect-ratio:240/230;cursor:pointer}
 .color-lbl small{font-weight:500;color:var(--soft);margin-left:8px;font-size:12px}
-.color-opts.many{grid-template-columns:repeat(3,1fr);gap:6px}
+.color-opts.many{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .color-opts.many .color-opt{font-size:11px;padding:4px 2px 6px;line-height:1.3}
 .color-opt.on{border-color:var(--accent);background:var(--cream);color:var(--ink)}
 .review .big{font-size:34px;font-weight:900;margin:2px 0}
@@ -144,7 +191,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .btn.ghost{background:transparent;color:var(--soft);box-shadow:none;font-size:14px;padding:10px;font-weight:500}
 .btn.ghost:active{transform:none;background:var(--cream)}
 .btn:disabled{opacity:.45}
-.actions{margin-top:14px}
+.actions{margin-top:8px}
 
 /* ---- cards ---- */
 .card{background:var(--paper);border-radius:var(--r);padding:14px 16px;margin-top:16px;border:1.5px solid var(--line)}
@@ -220,7 +267,7 @@ button.cal-d:active{background:var(--cream)}
 .disp small{font-size:20px;margin-right:4px;color:var(--soft)}
 .row2{display:flex;gap:8px;margin-top:10px}
 .field{
-  flex:1;min-width:0;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font-size:15px;
+  flex:1;min-width:0;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font-size:16px;
 }
 .field:focus{outline:2px solid var(--fur);outline-offset:-1px}
 .date-chip{flex:0 0 auto;position:relative;display:flex;align-items:center;gap:4px;padding:10px 12px;border-radius:12px;background:var(--cream);border:1.5px solid var(--line);font-size:14px;white-space:nowrap}
@@ -246,7 +293,7 @@ button.cal-d:active{background:var(--cream)}
 /* setup page */
 .setup{padding-top:24px}
 .setup .hello{text-align:center}
-.setup .cat{margin:0 auto;width:200px;height:190px}
+.setup .hello .cat{margin:0 auto;width:200px;height:190px}
 .setup .hello h1{font-size:22px;font-weight:900;letter-spacing:.08em;margin-top:4px}
 .setup .hello h1 span{color:var(--accent)}
 .setup .hello p{font-size:13.5px;color:var(--soft);margin-top:6px}
@@ -278,8 +325,9 @@ button.cal-d:active{background:var(--cream)}
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-<script src="cat.js?v=20261114a"></script>
-<script src="breeds/breeds.js?v=20261114a"></script>
+<script src="cat.js?v=20261116e"></script>
+<script src="yarn.js?v=20261116e"></script>
+<script src="breeds/breeds.js?v=20261116e"></script>
 
 <script>
 (() => {
@@ -443,10 +491,12 @@ function configAt(s){
 /* =========================================================
    計算（決まりは DESIGN.md 第3部）
    ・期間の予算は毎月の額だけ。余りもマイナスも次の期間へ持ちこさず、加算日に「貯金」へ入る
-   ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後入れは1週間前まで）
-   ・ネコの段階 = 今期の浮きが「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
+   ・今期の浮き = 記録した日の（今日の分 − 使った額）の合計。記録のない日は数えない（後から入れた日も数える）
+   ・1週間をすぎてから入れた日は、連続記録とプレゼントの「記録した日」にだけ数えない
+   ・ネコの段階 = 「今日つかえるお金」が「1日ぶん」の何日ぶんあるか。毎日動き、期間の初めは「ふつう」から
+   ・段階の名前は画面に出さない（絵と「次のレベルまで」のメーターで伝える）。名前はコードと設計書の中だけの呼び名
    ========================================================= */
-const LATE_DAYS = 7;          // 後入れを数えるのは、その日から1週間まで
+const LATE_DAYS = 7;          // 連続記録などに数える後入れは、その日から1週間まで
 const GIFT_RATE = .8;         // プレゼントには、期間の8割以上の日に記録が要る
 const dayDiff = (a, b) => Math.round((a - b) / 864e5);
 
@@ -478,7 +528,7 @@ function compute(){
   // 数える日 = 記録があり、その日から1週間以内に最初の記録を入れた日
   const counted = s => spentBy[s] !== undefined && firstAt[s] < addDays(parse(s), LATE_DAYS + 1).getTime();
 
-  const all = periodsUntil(today), stamps = {};
+  const all = periodsUntil(today), stamps = {}, lateDays = new Set();
   let savings = 0;
   for(const p of all){
     let float = 0, spent = 0, rec = 0, d = parse(p.start);
@@ -491,11 +541,11 @@ function compute(){
       const sp = spentBy[s];
       if(sp === undefined) continue;
       spent += sp;
-      if(counted(s)){
-        rec++;
-        stamps[s] = sp === 0 ? 'zero' : sp <= share + Math.max(0, float) ? 'good' : 'over';
-        float += share - sp;
-      } else stamps[s] = 'late';
+      // お金の計算（浮き・貯金・ネコの段階）には、いつ入れた記録でも数える
+      stamps[s] = sp === 0 ? 'zero' : sp <= share + Math.max(0, float) ? 'good' : 'over';
+      float += share - sp;
+      // 記録の習慣（連続記録・プレゼントの「記録した日」）は、1週間以内に入れた日だけ
+      if(counted(s)) rec++; else lateDays.add(s);
     }
     p.float = float; p.spent = spent; p.rec = rec; p.level = levelOf(float, p.unit);
     p.closed = p.end < today;
@@ -511,18 +561,20 @@ function compute(){
   let missing = 0;   // この1週間で、まだ記録のない日（後入れできる）
   for(let i = 1; i <= LATE_DAYS; i++){ const s = ymd(addDays(parse(today), -i)); if(s >= cur.start && spentBy[s] === undefined) missing++; }
 
+  // いまの段階は、画面に出ている「今日つかえるお金」で決める（締めた期間は、最後の日の残り＝その期間の浮き）
+  const todayLeft = cur.shareToday + cur.floatBefore - spentToday;
+  cur.level = levelOf(todayLeft, cur.unit);
   return {
-    today, cur, periods, savings, stamps, missing, spentToday,
+    today, cur, periods, savings, stamps, lateDays, missing, spentToday,
     recordedToday: spentBy[today] !== undefined,
     share: cur.shareToday, floatBefore: cur.floatBefore, float: cur.float,
-    todayLeft: cur.shareToday + cur.floatBefore - spentToday,
-    level: cur.level, toNext: toNextLevel(cur.float, cur.unit),
+    todayLeft, level: cur.level, toNext: toNextLevel(todayLeft, cur.unit),
     daysLeft: dayDiff(parse(cur.next), parse(today)), next: cur.next,
     ...streakOf(counted, spentBy, today),
   };
 }
 
-/* ネコの段階。今期の浮きが 1日ぶん（unit）の何日ぶんか */
+/* ネコの段階。今日つかえるお金が 1日ぶん（unit）の何日ぶんか */
 const LEVELS = [
   { name: 'ぼさぼさ' },            // マイナス3日ぶんより下
   { name: 'ふつう' },
@@ -538,7 +590,7 @@ function levelOf(float, unit){
   for(let i = 2; i < LEVELS.length; i++) if(float >= LEVELS[i].min * unit) lv = i;
   return lv;
 }
-/* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら浮かせればよいか */
+/* 次の段階（ぼさぼさのときは「ふつう」）まで、あといくら要るか */
 function toNextLevel(float, unit){
   const lv = levelOf(float, unit);
   if(lv === 0) return Math.ceil(LEVEL_LOW * unit - float);
@@ -596,6 +648,12 @@ function moodOf(c){
    描画
    ========================================================= */
 const $app = document.getElementById('app');
+/* ピンチとダブルタップのズームを止める（iOS は viewport の指定だけでは止まらないことがある） */
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => { if(e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', e => e.preventDefault());
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => { const now = Date.now(); if(now - lastTouchEnd < 300 && !e.target.closest('button, input, select, a, label, .cat')) e.preventDefault(); lastTouchEnd = now; }, { passive: false });
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* 直前に言わせたいせりふ（記録した直後など）。同期で描き直しても数秒は残す */
 let said = { text: '', until: 0 };
@@ -603,94 +661,88 @@ const say = text => { said = { text, until: Date.now() + 4000 }; };
 /* 表情が変わらない間は、せりふを毎回くじ引きし直さない */
 let moodMemo = { face: '', line: '' };
 
-function render(){
-  if(FB.state === 'loading') return renderMessage('準備しているにゃ…');
-  if(FB.state === 'error') return renderMessage(FB.msg, 'sad', true);
-  if(FB.state === 'signedout') return renderLogin();
-  if(FB.profile === undefined || FB.entries === null) return renderMessage('記録を読みこんでいるにゃ…');
-  // 初期設定の入力中は、同期が届いても描き直さない（打ちかけが消えるので）
-  if(!data){ if(!migrating && !$app.querySelector('#f-name')) renderSetup(); return; }
-  const c = compute();
-  const mood = moodOf(c);
-  if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
-  const line = said.until > Date.now() ? said.text : moodMemo.line;
-  const budget = c.cur.amount, remaining = budget - c.cur.spent;
-  const usedPct = budget > 0 ? Math.min(100, Math.max(0, remaining / budget * 100)) : 0;
-  const giftNeed = Math.ceil(c.cur.days * GIFT_RATE);
-  const wishes = wishPlan(c.savings);
+let shownLevel = null;   // 前に描いたときのレベル
+let tab = 'home';        // いま開いているタブ
 
-  const byDay = {};
-  for(const e of data.entries) if(e.date >= c.cur.start) (byDay[e.date] ||= []).push(e);
-  const days = Object.keys(byDay).sort().reverse();
-
-  $app.innerHTML = `
-    <header>
-      <div class="logo">NEKO<span>-</span>ZUKAI</div>
-      <button class="icon-btn" id="open-settings" aria-label="設定">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-    </header>
-
+/* ---- ホーム：今日つかえるお金・ネコ・記録のボタン ---- */
+function pageHome(c, { line }){
+  return `<main class="page home">
     <section class="today">
-      <div class="lbl">今日つかえるお金</div>
+      <div class="today-top"><div class="lbl">今日つかえるお金</div>
+        <div class="chip">${PAW('#E08A3C')}<span><b class="num">${c.streak}</b>日れんぞく</span></div></div>
       <div class="amt num ${c.todayLeft < 0 ? 'minus' : ''}">${yen(c.todayLeft)}</div>
-      <div class="sub">今日の分 <b class="num">${yen(c.share)}</b> ${c.floatBefore >= 0 ? '＋ 今期の浮き' : '− 今期の使いすぎ'} <b class="num">${yen(Math.abs(c.floatBefore))}</b> ・ 使った <b class="num">${yen(c.spentToday)}</b></div>
+      <div class="sub">${c.recordedToday ? `今日 使った <b class="num">${yen(c.spentToday)}</b>` : c.streak ? '今日記録すると、れんぞくがもう1日のびるにゃ' : '今日はまだ記録していないにゃ'}</div>
     </section>
-
     <section class="stage">
-      <div id="cat-slot"></div>
+      <div class="stage-row">
+        <div id="cat-slot"></div>
+        <div class="meter" aria-label="${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上のレベル'} ${c.toNext ? yen(c.toNext) : ''}">
+          <div class="meter-t">${c.level === 0 ? 'もとに戻るまで' : c.level < LEVELS.length - 1 ? '次のレベルまで' : 'いちばん上の<br>レベルだにゃ'}${c.toNext ? `<b class="num">${yen(c.toNext)}</b>` : ''}</div>
+          ${nekoYarn(c.level, 104)}
+        </div>
+      </div>
       <div class="bubble" id="bubble"><span class="who">${esc(data.catName)}</span><span id="line">${esc(line)}</span></div>
     </section>
-
     <div class="actions">
       <button class="btn" id="open-entry">🐾 使ったお金を入れる</button>
       ${c.recordedToday ? '' : '<button class="btn ghost" id="zero-day">今日は使わなかった</button>'}
-      ${c.missing ? `<p class="miss">記録していない日が ${c.missing}日あるにゃ。1週間以内なら、カレンダーから入れられるにゃ</p>` : ''}
+      ${c.missing ? `<button class="btn ghost miss" id="go-cal">記録していない日が ${c.missing}日あるにゃ。カレンダーで入れる ›</button>` : ''}
     </div>
+  </main>`;
+}
 
-    <section class="streak">
-      ${PAW('#E08A3C')}
-      <div class="streak-t">
-        ${c.streak ? `<b class="num">${c.streak}</b>日れんぞく` : '<b class="num">0</b>日'}
-        <small>${c.recordedToday ? `いちばん長い記録 ${c.best}日` : c.streak ? '今日記録すると、もう1日のびるにゃ' : '今日から始めるにゃ'}</small>
-      </div>
+/* ---- カレンダー：期間（加算日〜次の加算日の前日）ごと ---- */
+let calIdx = null;       // 見ている期間の番号。null なら今期
+let seenStamps = null;   // 前回描いたスタンプ。新しく押された日だけ動かす
+function pageCal(c){
+  const all = [...c.periods, c.cur];
+  const idx = calIdx === null ? all.length - 1 : Math.max(0, Math.min(all.length - 1, calIdx));
+  const p = all[idx], isCur = idx === all.length - 1;
+  let cells = WD.map(w => `<div class="cal-wd">${w}</div>`).join('');
+  let d = parse(p.start);
+  for(let i = 0; i < d.getDay(); i++) cells += '<div></div>';
+  for(let k = 0; k < p.days; k++, d = addDays(d, 1)){
+    const s = ymd(d), st = c.stamps[s], day = d.getDate();
+    const fresh = st && seenStamps && seenStamps[s] !== st;
+    const can = s <= c.today;
+    const num = day === 1 || k === 0 ? `${d.getMonth() + 1}/${day}` : String(day);   // 月が変わる日と初日は「月/日」
+    const label = `${d.getMonth() + 1}月${day}日${st ? ' ' + STAMP_LABEL[st] : ''}`;
+    cells += `<${can ? 'button' : 'div'} class="cal-d ${s === c.today ? 'today' : ''} ${can ? '' : 'off'} ${fresh ? 'stamped' : ''}" ${can ? `data-d="${s}" aria-label="${label}"` : ''}>
+      ${st ? `<span class="n ${num.length > 2 ? 'mo' : ''}">${num}</span>${PAW(STAMP[st])}` : num}</${can ? 'button' : 'div'}>`;
+  }
+  seenStamps = { ...c.stamps };
+  const nav = (i, txt, show) => show
+    ? `<button class="cal-nav" data-i="${i}" aria-label="${i < idx ? '前の期間' : '次の期間'}">${txt}</button>` : '<span class="cal-nav-sp"></span>';
+  const rest = p.amount - p.spent, pct = p.amount > 0 ? Math.min(100, Math.max(0, rest / p.amount * 100)) : 0;
+  return `<main class="page cal-page">
+    <section class="card cal">
+      <div class="cal-h">${nav(idx - 1, '‹', idx > 0)}<h2>${md(p.start)} 〜 ${md(p.end)}${isCur ? '（今期）' : ''}</h2>${nav(idx + 1, '›', !isCur)}</div>
+      <div class="cal-g">${cells}</div>
+      <div class="cal-legend">${Object.keys(STAMP).map(k => `<span>${PAW(STAMP[k])}${STAMP_LABEL[k]}</span>`).join('')}</div>
     </section>
-
-    <section class="card save">
-      <div class="save-top"><h2 style="margin:0">今期の浮き</h2><span class="v num ${c.float < 0 ? 'minus' : ''}">${yen(c.float)}</span></div>
-      <div class="lv-name">${esc(data.catName)}は いま <b>${LEVELS[c.level].name}</b></div>
-      <div class="lv-steps">${LEVELS.map((_, i) => `<i class="${i <= c.level && c.level > 0 ? 'on' : ''}"></i>`).join('')}</div>
-      <div class="lv-next">${c.level === 0 ? `あと ${yen(c.toNext)} 浮かせると「ふつう」に戻るにゃ`
-        : c.level < LEVELS.length - 1 ? `あと ${yen(c.toNext)} 浮かせると「${LEVELS[c.level + 1].name}」になるにゃ`
-        : 'このまま期間を終えると、プレゼントがもらえるにゃ'}</div>
-      <div class="lv-next">記録した日 ${c.cur.rec} / ${c.cur.days}日（プレゼントには ${giftNeed}日以上）</div>
-    </section>
-
     <section class="card">
-      <div class="save-top"><h2 style="margin:0">貯金</h2><span class="v num ${c.savings < 0 ? 'minus' : ''}">${yen(c.savings)}</span></div>
-      <div class="lv-next">加算日に、今期の浮きがここに入るにゃ。ほしいものを買うときに使うにゃ</div>
-      ${wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${w.id}">
-        <span class="wish-top"><span class="wish-n">${i + 1}. ${esc(w.name)}</span><span class="num">${w.ready ? '買えるにゃ！' : `${yen(w.got)} / ${yen(w.price)}`}</span></span>
-        <span class="bar"><i style="width:${Math.round(w.got / w.price * 100)}%"></i></span></button>`).join('')}
-      <button class="btn ghost" id="wish-add" style="margin-top:6px">＋ ほしいものを足す</button>
-      ${c.periods.length ? '<button class="btn ghost" id="open-history">これまでの振り返り</button>' : ''}
-    </section>
-
-    ${calendarHTML(c)}
-
-    <section class="card">
-      <h2>今期（${md(c.cur.start)} 〜 ${md(c.cur.end)}）</h2>
       <div class="stats">
-        <div><div class="k">今期の残り</div><div class="v num ${remaining < 0 ? 'minus' : ''}">${yen(remaining)}</div></div>
-        <div><div class="k">次の加算日まで</div><div class="v num">あと${c.daysLeft}日</div></div>
-        <div><div class="k">今期の予算</div><div class="v num">${yen(budget)}</div></div>
-        <div><div class="k">今期使った額</div><div class="v num">${yen(c.cur.spent)}</div></div>
+        ${isCur ? `<div><div class="k">今期の残り</div><div class="v num ${rest < 0 ? 'minus' : ''}">${yen(rest)}</div></div>
+                   <div><div class="k">次の加算日まで</div><div class="v num">あと${c.daysLeft}日</div></div>`
+                : `<div><div class="k">貯金に入った額</div><div class="v num ${p.float < 0 ? 'minus' : ''}">${yen(p.float)}</div></div>
+                   <div><div class="k">記録した日</div><div class="v num">${p.rec} / ${p.days}日</div></div>`}
+        <div><div class="k">予算</div><div class="v num">${yen(p.amount)}</div></div>
+        <div><div class="k">使った額</div><div class="v num">${yen(p.spent)}</div></div>
       </div>
-      <div class="bar ${remaining < 0 ? 'minus' : ''}"><i style="width:${usedPct}%"></i></div>
+      <div class="bar ${rest < 0 ? 'minus' : ''}"><i style="width:${pct}%"></i></div>
+      ${isCur ? `<div class="lv-next">記録した日 ${p.rec} / ${p.days}日。いちばん上のレベルで期間を終えて、${Math.ceil(p.days * GIFT_RATE)}日以上記録していると、プレゼントがもらえるにゃ</div>` : ''}
     </section>
+  </main>`;
+}
 
-    <section class="card">
-      <h2>今期の記録</h2>
+/* ---- 記録：今期の記録を日ごとに ---- */
+function pageList(c){
+  const byDay = {};
+  for(const e of data.entries) if(e.date >= c.cur.start) (byDay[e.date] ||= []).push(e);
+  const days = Object.keys(byDay).sort().reverse();
+  return `<main class="page">
+    <div class="zk-h"><h2>今期の記録（${md(c.cur.start)} 〜）</h2><span class="num" style="font-weight:700">${yen(c.cur.spent)}</span></div>
+    <div class="scroll"><section class="card" style="margin-top:0">
       ${days.length ? days.map(day => {
         const list = byDay[day].slice().sort((a,b) => b.at - a.at);
         const sum = list.reduce((s,e) => s + e.amount, 0);
@@ -702,21 +754,109 @@ function render(){
         </div>`;
       }).join('') : '<p class="empty">まだ記録がないにゃ</p>'}
     </section>
-    <p class="note">記録は ${esc(FB.user.email || 'Google アカウント')} に保存されています</p>
-  `;
+    <p class="note" style="margin:10px 0 4px">前の期間の記録は、カレンダーの日を押すと見られるにゃ<br>記録は ${esc(FB.user.email || 'Google アカウント')} に保存されています</p></div>
+    <button class="btn" id="open-entry" style="margin-top:8px">🐾 使ったお金を入れる</button>
+  </main>`;
+}
 
-  const slot = $app.querySelector('#cat-slot');
-  slot.replaceWith(makeCat(c.level, mood.face));
-  $app.querySelector('#open-entry').onclick = () => openEntry();
-  $app.querySelector('#open-settings').onclick = openSettings;
-  const z = $app.querySelector('#zero-day');
-  if(z) z.onclick = () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); };
-  $app.querySelectorAll('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
-  $app.querySelectorAll('.cal-d[data-d]').forEach(b => b.onclick = () => openDay(b.dataset.d, c));
-  $app.querySelectorAll('.wish').forEach(b => b.onclick = () => openWish(b.dataset.id));
-  $app.querySelector('#wish-add').onclick = () => openWish(null);
-  $app.querySelectorAll('.cal-nav').forEach(b => b.onclick = () => { calMonth = b.dataset.m; render(); });
-  const h = $app.querySelector('#open-history'); if(h) h.onclick = () => openHistory(c);
+/* ---- 貯金：貯金とほしいもの ---- */
+function pageSave(c){
+  const wishes = wishPlan(c.savings);
+  return `<main class="page">
+    <section class="card">
+      <div class="save-top"><h2 style="margin:0">貯金</h2><span class="v num ${c.savings < 0 ? 'minus' : ''}">${yen(c.savings)}</span></div>
+      <div class="lv-next">加算日に、今期の残りがここに入るにゃ。ほしいものを買うときに使うにゃ</div>
+    </section>
+    <div class="zk-h"><h2>ほしいもの</h2></div>
+    <div class="scroll">
+      ${wishes.length ? wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${w.id}" style="background:var(--paper);border:1.5px solid var(--line)">
+        <span class="wish-top"><span class="wish-n">${i + 1}. ${esc(w.name)}</span><span class="num">${w.ready ? '買えるにゃ！' : `${yen(w.got)} / ${yen(w.price)}`}</span></span>
+        <span class="bar" style="margin-top:0"><i style="width:${Math.round(w.got / w.price * 100)}%"></i></span></button>`).join('')
+        : '<p class="empty">ほしいものを足すと、貯金がどこまで届いたか見られるにゃ</p>'}
+    </div>
+    <button class="btn" id="wish-add" style="margin-top:8px">＋ ほしいものを足す</button>
+    ${c.periods.length ? '<button class="btn ghost" id="open-history">これまでの振り返り</button>' : ''}
+  </main>`;
+}
+
+/* ---- 図鑑：手に入れたネコ ---- */
+function pageZukan(c){
+  const owned = new Set(catKinds().map(k => k.id)), now = catColor();
+  const all = [...BASE_KINDS, ...allBreeds()];
+  return `<main class="page">
+    <div class="zk-h"><h2>ネコ図鑑</h2><span class="num" style="font-weight:700">${owned.size} / ${all.length} 種類</span></div>
+    <div class="scroll"><div class="zukan">${all.map(k => owned.has(k.id)
+      ? `<button class="zk ${k.id === now ? 'on' : ''}" data-kind="${k.id}"><span class="zk-cat" data-cat="${k.id}"></span>${esc(k.name)}</button>`
+      : `<div class="zk locked"><div class="q">？</div>？？？</div>`).join('')}</div>
+      <p class="note" style="margin:8px 0 4px">いちばん上のレベルで期間を終えると、プレゼントで新しいネコが来るにゃ</p></div>
+  </main>`;
+}
+/* 図鑑のネコを押したとき：大きく見て、このネコに変えられる */
+function openKind(id, c){
+  const k = [...BASE_KINDS, ...allBreeds()].find(x => x.id === id); if(!k) return;
+  const now = catColor() === id;
+  const { sheet, close } = openSheet(`<div class="review"><div id="kind-cat"></div>
+    <div class="big" style="font-size:22px">${esc(k.name)}</div>
+    ${k.group ? `<p>${esc(k.group)}</p>` : ''}
+    ${now ? '<p>いま いっしょにいるネコだにゃ</p>' : '<button class="btn" id="kind-use" style="margin-top:16px">このネコにする</button>'}</div>`);
+  sheet.querySelector('#kind-cat').replaceWith(makeCat(c.level, 'happy', 'kind', id));
+  const b = sheet.querySelector('#kind-use');
+  if(b) b.onclick = () => { saveColor(id); FB.profile = { ...FB.profile, catColor: id }; rebuild(); say('すがたが変わったにゃ！'); close(); tab = 'home'; render(); };
+}
+
+function render(){
+  if(FB.state === 'loading') return renderMessage('準備しているにゃ…');
+  if(FB.state === 'error') return renderMessage(FB.msg, 'sad', true);
+  if(FB.state === 'signedout') return renderLogin();
+  if(FB.profile === undefined || FB.entries === null) return renderMessage('記録を読みこんでいるにゃ…');
+  // 初期設定の入力中は、同期が届いても描き直さない（打ちかけが消えるので）
+  if(!data){ if(!migrating && !$app.querySelector('#f-name')) renderSetup(); return; }
+  const c = compute();
+  // レベルが変わったら、名前は出さずにひとこと
+  if(shownLevel && shownLevel.start === c.cur.start && shownLevel.lv !== c.level) say(c.level > shownLevel.lv ? 'レベルが上がったにゃ！' : 'レベルが下がっちゃったにゃ…');
+  shownLevel = { start: c.cur.start, lv: c.level };
+  const mood = moodOf(c);
+  if(moodMemo.face !== mood.face) moodMemo = { face: mood.face, line: mood.line };
+  const line = said.until > Date.now() ? said.text : moodMemo.line;
+  const ICON = {
+    home: '<path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/>',
+    cal: '<rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M8.5 3v4M15.5 3v4"/>',
+    list: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.5" cy="7" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17" r="1"/>',
+    save: '<circle cx="12" cy="12" r="8.5"/><path d="M9 7.5l3 4.5 3-4.5M12 12v5M9 12.5h6M9 15h6"/>',
+    zukan: '<path d="M5 9V4l4 3h6l4-3v5a7.5 7.5 0 1 1-14 0z"/><path d="M9.5 12.5v.5M14.5 12.5v.5M11 15.5q1 1 2 0"/>',
+  };
+  const TABS = [['home', 'ホーム'], ['cal', 'カレンダー'], ['list', '記録'], ['save', '貯金'], ['zukan', '図鑑']];
+  const pages = { home: pageHome, cal: pageCal, list: pageList, save: pageSave, zukan: pageZukan };
+  const top = $app.querySelector('.scroll'), keep = top && $app.dataset.tab === tab ? top.scrollTop : 0;
+
+  $app.classList.add('tabbed'); $app.dataset.tab = tab;
+  $app.innerHTML = `
+    <header>
+      <div class="logo">NEKO<span>-</span>ZUKAI</div>
+      <button class="icon-btn" id="open-settings" aria-label="設定">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+    ${pages[tab](c, { line })}
+    <nav class="tabs">${TABS.map(([k, t]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>${t}</button>`).join('')}</nav>
+  `;
+  const $ = q => $app.querySelector(q), $$ = q => $app.querySelectorAll(q), on = (q, f) => { const el = $(q); if(el) el.onclick = f; };
+  if(keep && $('.scroll')) $('.scroll').scrollTop = keep;
+  $$('.tab').forEach(b => b.onclick = () => { if(tab === b.dataset.tab) return; tab = b.dataset.tab; if(tab === 'cal') calIdx = null; render(); });
+  on('#open-settings', openSettings);
+  const slot = $('#cat-slot'); if(slot) slot.replaceWith(makeCat(c.level, mood.face));
+  on('#open-entry', () => openEntry());
+  on('#zero-day', () => { say(pick(LINES.zero)); addEntry({ date: c.today, amount: 0, memo: '' }); });
+  on('#go-cal', () => { tab = 'cal'; calIdx = null; render(); });
+  $$('.ent').forEach(b => b.onclick = () => openEntry(data.entries.find(e => e.id === b.dataset.id)));
+  $$('.cal-d[data-d]').forEach(b => b.onclick = () => openDay(b.dataset.d, c));
+  $$('.wish').forEach(b => b.onclick = () => openWish(b.dataset.id));
+  on('#wish-add', () => openWish(null));
+  $$('.cal-nav').forEach(b => b.onclick = () => { calIdx = Number(b.dataset.i); render(); });
+  on('#open-history', () => openHistory(c));
+  $$('.zk-cat').forEach(el => el.replaceWith(makeCat(1, 'normal', 'zk', el.dataset.cat)));
+  $$('.zk[data-kind]').forEach(b => b.onclick = () => openKind(b.dataset.kind, c));
   maybeReview(c);
   syncWidget(c);
   maybeGift(c);
@@ -750,11 +890,11 @@ function maybeReview(c){
     <div class="review">
       <div id="rv-cat"></div>
       <p>${md(last.start)} 〜 ${md(last.end)} の振り返り</p>
-      <div class="big num ${f < 0 ? 'minus' : ''}">${f >= 0 ? yen(f) + ' 浮いたにゃ！' : yen(-f) + ' 使いすぎたにゃ…'}</div>
-      <p>${f > 0 ? '浮いた分は貯金に入れたにゃ。' : f < 0 ? '使いすぎた分は貯金から引いたにゃ。' : ''}貯金は ${yen(c.savings)} になったにゃ</p>
-      <p>記録した日 ${last.rec} / ${last.days}日・「${LEVELS[last.level].name}」で終えたにゃ</p>
-      ${before ? `<p>その前の期間より ${diff >= 0 ? yen(diff) + ' 多く' : yen(-diff) + ' 少なく'}浮いたにゃ</p>` : ''}
-      ${last.gift ? '<div class="up">液体ネコで終えたごほうびがあるにゃ！</div>'
+      <div class="big num ${f < 0 ? 'minus' : ''}">${f >= 0 ? yen(f) + ' のこったにゃ！' : yen(-f) + ' 使いすぎたにゃ…'}</div>
+      <p>${f > 0 ? 'のこった分は貯金に入れたにゃ。' : f < 0 ? '使いすぎた分は貯金から引いたにゃ。' : ''}貯金は ${yen(c.savings)} になったにゃ</p>
+      <p>記録した日 ${last.rec} / ${last.days}日</p>
+      ${before ? `<p>その前の期間より ${diff >= 0 ? yen(diff) + ' 多く' : yen(-diff) + ' 少なく'}のこったにゃ</p>` : ''}
+      ${last.gift ? '<div class="up">いちばん上のレベルで終えたごほうびがあるにゃ！</div>'
         : last.level === 4 ? '<div class="up">記録が8割にとどかなかったので、プレゼントはおあずけにゃ</div>' : ''}
       <button class="btn" id="rv-ok" style="margin-top:18px">${f >= 0 ? '今期もがんばるにゃ' : '今期は取りもどすにゃ'}</button>
     </div>`, afterSheets);
@@ -787,7 +927,7 @@ function maybeGift(c){
   if(!p) return;
   const { sheet, close } = openSheet(`
     <div class="review gift">
-      <p>${md(p.start)} 〜 ${md(p.end)} を、液体ネコで終えたごほうびだにゃ</p>
+      <p>${md(p.start)} 〜 ${md(p.end)} を、いちばん上のレベルで終えたごほうびだにゃ</p>
       <button class="gift-box" id="gift-open" aria-label="プレゼントを開ける">
         <svg viewBox="0 0 120 120" width="150" height="150"><rect x="18" y="52" width="84" height="56" rx="8" fill="#F3B76C" stroke="#5A3E2B" stroke-width="4"/>
           <rect x="12" y="34" width="96" height="24" rx="8" fill="#F6C98C" stroke="#5A3E2B" stroke-width="4"/>
@@ -832,12 +972,12 @@ function maybeGift(c){
 /* これまでの期間の一覧 */
 function openHistory(c){
   const rows = c.periods.slice().reverse().map(p =>
-    `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${p.float >= 0 ? 'plus' : 'minus'}">${p.float >= 0 ? '+' : ''}${yen(p.float)}</td><td class="num">${p.rec}/${p.days}日</td><td>${LEVELS[p.level].name}</td></tr>`).join('');
+    `<tr><td>${md(p.start)}〜</td><td class="num">${yen(p.spent)}</td><td class="num ${p.float >= 0 ? 'plus' : 'minus'}">${p.float >= 0 ? '+' : ''}${yen(p.float)}</td><td class="num">${p.rec}/${p.days}日</td></tr>`).join('');
   const bought = (data.wishes || []).filter(w => w.bought);
   openSheet(`
     <h3>これまでの振り返り</h3>
-    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>浮き</th><th>記録</th><th>終わり</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note" style="text-align:left">「浮き」は、記録した日の（その日の分 − 使った額）の合計だにゃ。加算日に貯金へ入るにゃ</p>
+    <table class="hist"><thead><tr><th>期間</th><th>使った</th><th>のこり</th><th>記録</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note" style="text-align:left">「のこり」は、期間の終わりに残っていたお金だにゃ（記録した日のぶんだけ数えるにゃ）。加算日に貯金へ入るにゃ</p>
     ${bought.length ? `<h3 style="margin-top:18px">貯金で買ったもの</h3>${bought.map(w => `<div class="day-h" style="padding:6px 0"><span>${md(w.bought)}　${esc(w.name)}</span><span class="num">${yen(w.price)}</span></div>`).join('')}` : ''}`);
 }
 
@@ -845,14 +985,14 @@ function openHistory(c){
 function openDay(date, c){
   const list = data.entries.filter(e => e.date === date).sort((a, b) => b.at - a.at);
   const tooOld = date < ymd(addDays(parse(c.today), -LATE_DAYS));
-  const late = c.stamps[date] === 'late' || (!list.length && tooOld);
+  const late = c.lateDays.has(date) || (!list.length && tooOld);
   if(!list.length && !late) return openEntry(null, date);
   const { sheet, close } = openSheet(`
     <h3>${md(date)} の記録</h3>
     ${list.length ? list.map(e => `<button class="ent" data-id="${e.id}">
       <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
       <span class="yen num">${yen(e.amount)}</span></button>`).join('') : '<p class="empty">この日の記録はないにゃ</p>'}
-    ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、今期の浮きや連続記録には数えないにゃ（記録として残すことはできるにゃ）</p>' : ''}
+    ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、お金の計算には入るけど、連続記録とプレゼントの「記録した日」には数えないにゃ</p>' : ''}
     <button class="btn" id="day-add" style="margin-top:12px">この日に記録を足す</button>`);
   sheet.querySelectorAll('.ent').forEach(b => b.onclick = () => { close(); openEntry(data.entries.find(e => e.id === b.dataset.id)); });
   sheet.querySelector('#day-add').onclick = () => { close(); openEntry(null, date); };
@@ -919,42 +1059,8 @@ function openWish(id){
    カレンダー（肉球スタンプ）
    ========================================================= */
 const PAW = c => `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="26" rx="9" ry="8" fill="${c}"/><circle cx="9" cy="16" r="4" fill="${c}"/><circle cx="16" cy="9" r="4" fill="${c}"/><circle cx="24" cy="9" r="4" fill="${c}"/><circle cx="31" cy="16" r="4" fill="${c}"/></svg>`;
-const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E', late: '#EDE3D6' };
-const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった', late: '1週間すぎ（数えない）' };
-let calMonth = null;   // 'YYYY-MM'。null なら今月
-let seenStamps = null; // 前回描いたスタンプ。新しく押された日だけ動かす
-
-function calendarHTML(c){
-  const ym = s => s.slice(0, 7);
-  const first = ym(data.start), last = ym(c.today);
-  let m = calMonth || last;
-  if(m < first) m = first;
-  if(m > last) m = last;
-  const [y, mo] = m.split('-').map(Number);
-  const shift = k => { const d = new Date(y, mo - 1 + k, 1); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
-
-  let cells = WD.map(w => `<div class="cal-wd">${w}</div>`).join('');
-  for(let i = 0; i < new Date(y, mo - 1, 1).getDay(); i++) cells += '<div></div>';
-  for(let d = 1; d <= dim(y, mo - 1); d++){
-    const s = `${m}-${pad(d)}`;
-    const st = c.stamps[s];
-    const fresh = st && seenStamps && seenStamps[s] !== st;
-    const can = s >= data.start && s <= c.today;
-    const label = `${mo}月${d}日${st ? ' ' + STAMP_LABEL[st] : ''}`;
-    cells += `<${can ? 'button' : 'div'} class="cal-d ${s === c.today ? 'today' : ''} ${can ? '' : 'off'} ${fresh ? 'stamped' : ''}" ${can ? `data-d="${s}" aria-label="${label}"` : ''}>
-      ${st ? `<span class="n">${d}</span>${PAW(STAMP[st])}` : d}</${can ? 'button' : 'div'}>`;
-  }
-  const nav = (k, txt, show) => show
-    ? `<button class="cal-nav" data-m="${shift(k)}" aria-label="${k < 0 ? '前の月' : '次の月'}">${txt}</button>`
-    : '<span class="cal-nav-sp"></span>';
-  seenStamps = { ...c.stamps };
-  return `<section class="card cal">
-    <div class="cal-h">${nav(-1, '‹', m > first)}<h2>${y}年 ${mo}月</h2>${nav(1, '›', m < last)}</div>
-    <div class="cal-g">${cells}</div>
-    <div class="cal-legend">${Object.keys(STAMP).map(k => `<span>${PAW(STAMP[k])}${STAMP_LABEL[k]}</span>`).join('')}</div>
-  </section>`;
-}
-
+const STAMP = { good: '#E8A25C', over: '#C9B6A5', zero: '#F2C14E' };
+const STAMP_LABEL = { good: '目安内', over: '使いすぎ', zero: '使わなかった' };
 /* ネコの絵（cat.js）。段階でポーズと毛並み、その日の様子で表情が変わる */
 const catCache = {};
 const COLOR_KEY = 'neko-zukai-color';
@@ -1097,11 +1203,11 @@ function settingsForm(v){
   return `
     <div class="form">
       <label>ネコの名前<input class="field" id="f-name" maxlength="12" value="${esc(v.catName)}" placeholder="例: ミケ"></label>
-      <div class="color-pick" role="radiogroup" aria-label="ネコの種類">
+      ${v.setup ? `<div class="color-pick" role="radiogroup" aria-label="ネコの種類">
         <span class="color-lbl">ネコの種類${allBreeds().length ? `<small>プレゼントで ${ownedBreeds().length} / ${allBreeds().length} 種類</small>` : ''}</span>
         <div class="color-opts ${catKinds().length > 2 ? 'many' : ''}">${catKinds().map(c => `<button type="button" class="color-opt ${c.id === v.color ? 'on' : ''}" data-color="${c.id}" role="radio" aria-checked="${c.id === v.color}">
           <span class="color-cat" data-cat="${c.id}"></span><span>${c.name}</span></button>`).join('')}</div>
-      </div>
+      </div>` : ''}
       <label>毎月自由に使えるお金
         <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${v.amount || ''}" placeholder="30000"></div>
       </label>
@@ -1125,6 +1231,7 @@ function readForm(root, setup){
 }
 
 function renderSetup(){
+  $app.classList.remove('tabbed');
   $app.innerHTML = `
     <div class="setup">
       <div class="hello">
@@ -1155,6 +1262,7 @@ function renderSetup(){
 
 /* ネコと一言だけの画面（読みこみ中・エラー） */
 function renderMessage(msg, face = 'normal', retry = false){
+  $app.classList.remove('tabbed');
   $app.innerHTML = `
     <div class="setup"><div class="hello">
       <div id="cat-slot"></div>
@@ -1169,6 +1277,7 @@ function renderMessage(msg, face = 'normal', retry = false){
 const GLOGO = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 7-10.3 7-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
 
 function renderLogin(){
+  $app.classList.remove('tabbed');
   $app.innerHTML = `
     <div class="setup"><div class="hello">
       <div id="cat-slot"></div>
@@ -1187,7 +1296,7 @@ function openSettings(){
   const { sheet, close } = openSheet(`
     <h3>設定</h3>
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
-    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。
+    <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。ネコを変えるときは「図鑑」のタブからだにゃ。
       ${pending ? `<br>いまは 毎月 ${yen(now.amount)}・${now.payday}日。${md(c0.next)} から上の内容になるにゃ` : ''}</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
     <button class="btn ghost" id="s-widget" style="margin-top:14px">ホーム画面のウィジェットを設定する</button>
@@ -1196,10 +1305,8 @@ function openSettings(){
       <button class="btn ghost" id="s-out">ログアウト</button>
     </div>
   `);
-  bindColorPick(sheet);
   sheet.querySelector('#s-save').onclick = () => {
     const f = readForm(sheet, false);
-    if(!f.err && f.color !== catColor()) saveColor(f.color);
     if(f.err){ sheet.querySelector('#f-err').textContent = f.err; return; }
     const p = profileOf(data);
     p.catName = f.name;
@@ -1254,73 +1361,27 @@ function newToken(){
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   return Array.from(a, x => abc[x % abc.length]).join('');
 }
+/* Scriptable に貼るのは短い「読みこみ係」だけ。中身（widget/widget.js）は毎回サイトから読むので、
+   ウィジェットの見た目や計算を直しても、貼り直さなくてよい。読めないときは、前に読んだものを使う */
 function widgetScript(token){
-  return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う
+  return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う。中身は自動で新しくなる
 const TOKEN = "${token}";
-const KEY = "${firebaseConfig.apiKey}";
-const BASE = "https://oceanhermit.github.io/my-tools/neko-zukai/";
-const DOC = "https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/widgets/" + TOKEN + "?key=" + KEY;
-
-const C = { bg: new Color("#FFF6E9"), ink: new Color("#5A3E2B"), soft: new Color("#9A7B62"), minus: new Color("#C8553D"), accent: new Color("#E08A3C") };
-const yen = n => (n < 0 ? "−" : "") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
-const pad = n => String(n).padStart(2, "0");
-const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-const day = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
-
-async function load(){
-  try{
-    const j = await new Request(DOC).loadJSON();
-    if(!j.fields) return null;
-    const o = {};
-    for(const [k, v] of Object.entries(j.fields)) o[k] = v.stringValue ?? Number(v.integerValue ?? v.doubleValue);
-    return o;
-  }catch(e){ return null; }
-}
-async function catImage(d){
-  const fm = FileManager.local(), path = fm.joinPath(fm.cacheDirectory(), "neko-" + d.color + "-" + d.level + ".png");
-  try{ const img = await new Request(BASE + "widget/cat-" + d.color + "-" + d.level + ".png").loadImage(); fm.writeImage(path, img); return img; }
-  catch(e){ return fm.fileExists(path) ? fm.readImage(path) : null; }
-}
-
-const d = await load();
-const w = new ListWidget();
-w.backgroundColor = C.bg;
-w.setPadding(12, 12, 10, 12);
-w.url = BASE + "#add";
-w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
-
-if(!d){
-  const t = w.addText("NEKO-ZUKAI"); t.font = Font.boldRoundedSystemFont(14); t.textColor = C.ink;
-  w.addSpacer(6);
-  const m = w.addText("読みこめなかったにゃ。電波を確かめてね"); m.font = Font.systemFont(11); m.textColor = C.soft;
+const SRC = "https://oceanhermit.github.io/my-tools/neko-zukai/widget/widget.js";
+const fm = FileManager.local(), path = fm.joinPath(fm.documentsDirectory(), "neko-zukai-widget.js");
+try{
+  const code = await new Request(SRC + "?t=" + Date.now()).loadString();
+  if(code.includes("module.exports")) fm.writeString(path, code);
+}catch(e){}
+if(fm.fileExists(path)){
+  let run;
+  try{ run = importModule(path); }
+  catch(e){ const m = {}; new Function("module", fm.readString(path))(m); run = m.exports; }
+  await run(TOKEN);
 }else{
-  const today = ymd(new Date());
-  const through = s => s < d.start ? 0 : Math.floor(d.budget * Math.min(d.total, Math.round((day(s) - day(d.start)) / 864e5) + 1) / d.total);
-  const share = s => through(s) - through(ymd(new Date(day(s).getTime() - 864e5)));
-  const top = w.addStack(); top.layoutHorizontally(); top.centerAlignContent();
-  const left = top.addStack(); left.layoutVertically();
-  const lbl = left.addText("今日つかえる"); lbl.font = Font.mediumRoundedSystemFont(11); lbl.textColor = C.soft;
-  top.addSpacer();
-  const img = await catImage(d);
-  if(img){ const im = top.addImage(img); im.imageSize = new Size(58, 56); }
-  w.addSpacer(2);
-  if(today > d.end){
-    const a = w.addText("加算日だにゃ"); a.font = Font.boldRoundedSystemFont(18); a.textColor = C.ink;
-    const b = w.addText("アプリを開いてね"); b.font = Font.systemFont(11); b.textColor = C.soft;
-  }else{
-    // アプリを開いた日はその日の数字で。開いていない日（記録なし）は浮きに数えないので、最後の浮きに今日の分を足す
-    const fl = today === d.updated ? (d.floatBefore ?? 0) : (d.floatNow ?? 0);
-    const left2 = share(today) + fl - (today === d.updated ? (d.spentToday ?? 0) : 0);
-    const a = w.addText(yen(left2)); a.font = Font.boldRoundedSystemFont(26); a.textColor = left2 < 0 ? C.minus : C.ink; a.minimumScaleFactor = .6; a.lineLimit = 1;
-    const b = w.addText((d.floatNow ?? 0) < 0 ? "今期の使いすぎ " + yen(-d.floatNow) : "今期の浮き " + yen(d.floatNow ?? 0)); b.font = Font.systemFont(10.5); b.textColor = C.soft; b.lineLimit = 1;
-  }
-  w.addSpacer();
-  const btn = w.addStack(); btn.backgroundColor = C.accent; btn.cornerRadius = 12; btn.setPadding(6, 10, 6, 10); btn.centerAlignContent();
-  btn.addSpacer();
-  const bt = btn.addText("＋ 記録する"); bt.font = Font.boldRoundedSystemFont(13); bt.textColor = Color.white();
-  btn.addSpacer();
+  const w = new ListWidget();
+  const t = w.addText("読みこめなかったにゃ。電波を確かめてね"); t.font = Font.systemFont(12);
+  if(config.runsInWidget) Script.setWidget(w); else await w.presentSmall();
 }
-if(config.runsInWidget) Script.setWidget(w); else await w.presentSmall();
 Script.complete();
 `;
 }
@@ -1339,13 +1400,14 @@ async function openWidgetSetup(){
     <ol class="steps">
       <li>App Store で「Scriptable」（無料）を入れる</li>
       <li>下のボタンでスクリプトをコピーする</li>
-      <li>Scriptable を開き、右上の「＋」→ 貼り付け → 上の名前を「NEKO-ZUKAI」にする</li>
+      <li>Scriptable を開き、右上の「＋」→ 貼り付け → 上の名前を「NEKO-ZUKAI」にする<br>（前に作ったものがあるときは、それを開いて中身をぜんぶ消してから貼る）</li>
       <li>ホーム画面を長押し →「＋」→ Scriptable → いちばん小さいサイズを追加</li>
       <li>追加したウィジェットを長押し →「ウィジェットを編集」→ Script で「NEKO-ZUKAI」を選ぶ</li>
     </ol>
     <button class="btn" id="w-copy">スクリプトをコピー</button>
     <p class="note" style="text-align:left">ウィジェットを押すと、Safari で記録の画面が開くにゃ。はじめて開くときだけ、Safari でもログインしてね。<br>
-      スクリプトには、あなた専用の秘密の番号が入っているので、ほかの人に渡さないでね。</p>`);
+      スクリプトには、あなた専用の秘密の番号が入っているので、ほかの人に渡さないでね。<br>
+      このスクリプトは、新しい中身を自動で読みこむにゃ。これからは貼り直さなくていいにゃ。</p>`);
   sheet.querySelector('#w-copy').onclick = async () => {
     try{ await navigator.clipboard.writeText(script); toast('コピーしたにゃ'); }
     catch(e){
