@@ -41,7 +41,10 @@ my-tools/
 ├── kyogaku-go/
 │   └── index.html
 ├── kizuna-karuta/
-│   └── index.html
+│   ├── index.html
+│   ├── firestore.rules   # Firestore ルールの控え（Console に貼る）
+│   ├── storage.rules     # Storage ルールの控え（Console に貼る）
+│   └── rules-test.mjs    # ルールのテスト（エミュレーター用。本番にはつながない）
 ├── kasanari/
 │   └── index.html
 ├── neko-zukai/
@@ -136,6 +139,14 @@ git add . && git commit -m "add: 新ツール名" && git push
   かさなり側のプロジェクトには承認済みドメインの登録が要る（かるた側には不要）。
 - 一方で、匿名認証は誰でも uid を取得できる。第三者に触られたくないデータがある場合は
   Firestore / Storage のセキュリティルールを確認すること。
+- キズナかるたのルールの控えは `kizuna-karuta/firestore.rules` と `kizuna-karuta/storage.rules`。
+  Console（プロジェクト `karuta-game-c8fc8`）の Firestore / Storage の「ルール」タブに中身を貼り、
+  控えと同じ内容に保つ。部屋（`artifacts/karuta-v1/public/data/rooms/{roomId}`）以外は読み書きできず、
+  部屋の書きかえはその部屋の参加者が決まった形でだけできる。
+  ゲームの判定はブラウザで動くので、同じ部屋の参加者による反応速度のずる等はルールでは防げない。
+- かるたのプロジェクトは **Blaze（従量課金）**。Google Cloud の「お支払い → 予算とアラート」で
+  予算アラート（例: 月 500 円）を設定しておく。期限切れの部屋は自動では消えずに残る
+  （中身は名前と点数だけ。増えすぎたら Console から消す）。
 - リポジトリが Public のため Firebase の `apiKey` は公開されるが、これは Web 版 Firebase の
   正常な仕様で秘密情報ではない。実質的な防御はセキュリティルール側で行う。
 - 取り札の画像は Firebase Storage から読み込む設計のため、このリポジトリには含めない。

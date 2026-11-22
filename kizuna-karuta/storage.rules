@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// キズナかるた（https://oceanhermit.github.io/my-tools/kizuna-karuta/）用の Storage ルール。
+// 対象プロジェクト: karuta-game-c8fc8
+// Console の Storage →「ルール」タブに、この中身をそのまま貼る。
+//
+// Storage に置いているのは、BGM・効果音（mp3）と取り札の画像（取り札/*.jpg）だけ。
+// どれも公開してよいもので、個人の情報は入っていない。
+//
+// - 書き込み（アップロード・上書き・削除）は誰にもできない。
+//   ファイルの入れ替えは Console から（＝プロジェクトの持ち主だけ）行う。
+// - 読み取りは、ログイン（匿名でよい）している人だけ。
+//   ・取り札の画像は、アプリがログインのあとに getDownloadURL で取りにいくので、これで足りる。
+//   ・BGM・効果音は、index.html に書いた「token= 付きの URL」で直接読むので、このルールに関係なく再生できる。
+//
+// 以前 Console に入っていたのは「読み取りは誰でも可（if true）・書き込みは禁止」だった。
+// 中身が公開してよいものだけなので、そのままでも危険ではない。
+// ただしこのリポジトリの自動チェックは「誰でも可（if true）」を止めるので、
+// 控えは「ログインしている人だけ読める」にしてある。Console にもこちらを貼るのがおすすめ。
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}
