@@ -1,0 +1,17 @@
+name: security-check
+
+# 公開（GitHub Pages）される前に、秘密の鍵・全開放ルールなどが混ざっていないか確かめる
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 公開前セキュリティチェック
+        run: bash scripts/security-check.sh
