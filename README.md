@@ -24,6 +24,12 @@
 | チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
 | ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
+## セキュリティ
+
+作るとき・公開するときの決まりは **[`SECURITY.md`](SECURITY.md)**。
+コミット / プッシュ前（Claude Code のフック）と GitHub への push 時（Actions）に
+`scripts/security-check.sh` が自動で走り、秘密の鍵・全開放ルールなどが混ざっていれば止める。
+
 ## ディレクトリ構成
 
 ```
@@ -50,6 +56,11 @@ my-tools/
 ├── chirashi-map/
 │   ├── index.html
 │   └── firestore.rules
+├── SECURITY.md           # ★作る・公開するときのセキュリティの決まり★
+├── CLAUDE.md             # Claude Code への指示（SECURITY.md を守らせる）
+├── scripts/security-check.sh  # 公開前の自動チェック
+├── .claude/              # Claude Code のフック設定（コミット前に自動チェック）
+├── .github/workflows/    # push 時の自動チェック
 ├── .nojekyll             # GitHub Pages 用（Jekyll 処理を無効化）
 └── README.md
 ```
