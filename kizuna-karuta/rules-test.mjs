@@ -439,3 +439,31 @@ test('他人の部屋は消せない（プライベートの子・ランダム�
   await joinOrCreateRoom('dave', 'd', null, true);
   await assertFails(roomRef(dbOf('carol'), id).delete()); // ランダムは2人いれば誰も消せない（退出で抜ける）
 });
+
+// =====================================================================
+// 満員（10 人）でも、確かめる回数の上限（1回の書き込みで 1000 回）を超えずに遊べる
+// =====================================================================
+test('10人の部屋: 入室 → 開始 → 最後の人が取る → お手つき → 次へ → 2回目の開始 → 最後の人の退出', async () => {
+  const uids = Array.from({ length: 10 }, (_, i) => `u${i}`);
+  for (const u of uids) await assertSucceeds(joinOrCreateRoom(u, `名前${u}`, 'full10'));
+  await assertSucceeds(startGame('u0', 'full10', 5));
+  await assertSucceeds(clickCard('u9', 'full10', await current('full10')));
+  await assertSucceeds(nextTurn('u0', 'full10'));
+  await assertSucceeds(clickCard('u8', 'full10', await wrongCard('full10')));
+  await assertSucceeds(clickCard('u9', 'full10', await current('full10')));
+  await assertSucceeds(returnToLobby('u0', 'full10'));
+  await assertSucceeds(startGame('u0', 'full10', 5));
+  await assertSucceeds(leaveRoom('u9', 'full10'));
+  await assertSucceeds(leaveRoom('u5', 'full10'));
+  await assertSucceeds(transferHost('u0', 'full10', 'u8'));
+});
+
+test('10人のランダムマッチ（ホスト以外が開始）とホストの退出', async () => {
+  const uids = Array.from({ length: 10 }, (_, i) => `r${i}`);
+  const id = await joinOrCreateRoom('r0', '名前r0', null, true);
+  // 10 人そろった待機中の部屋を、ルールを通さずに用意する（前の試合の点が残っている状態）
+  const room = await adminGet(id);
+  await adminSet(id, { ...room, players: uids.map((u) => ({ uid: u, name: `名前${u}`, score: 3, joinedAt: Date.now() })) });
+  await assertSucceeds(startGame('r9', id, 5));
+  await assertSucceeds(leaveRoom('r0', id));
+});

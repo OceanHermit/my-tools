@@ -39,7 +39,8 @@ service cloud.firestore {
       }
 
       function isMember() { return signedIn() && hasUid(resource.data.players, me()); }
-      function isHost()   { return isMember() && resource.data.hostId == me(); }
+      // ホストかどうかを先に確かめる（参加者の一覧を調べるのは重いので後にする）
+      function isHost()   { return signedIn() && resource.data.hostId == me() && hasUid(resource.data.players, me()); }
 
       // 今回の書き込みで変わった項目
       function changed()   { return request.resource.data.diff(resource.data).affectedKeys(); }
@@ -151,60 +152,60 @@ service cloud.firestore {
 
       // ゲーム開始（ホスト。ランダムマッチは入った2人目が始めるので参加者なら可）
       function isStart() {
-        return (isHost() || (resource.data.type == 'random' && isMember()))
-          && resource.data.status == 'waiting'
+        return resource.data.status == 'waiting'
           && changed().hasOnly(['status', 'players', 'gameState'])
           && request.resource.data.status == 'playing'
           && playersReset()
-          && validStartState(request.resource.data.gameState);
+          && validStartState(request.resource.data.gameState)
+          && (resource.data.hostId == me() || resource.data.type == 'random')
+          && isMember();
       }
 
       // 設定の変更（ホスト・待機中）
       function isSettings() {
-        return isHost()
-          && resource.data.status == 'waiting'
+        return resource.data.status == 'waiting'
           && changed().hasOnly(['settings'])
-          && validSettings(request.resource.data.settings);
+          && validSettings(request.resource.data.settings)
+          && isHost();
       }
 
       // 親（ホスト）を譲る: 今のホストが、部屋にいる人へ
       function isTransferHost() {
-        return isHost()
-          && changed().hasOnly(['hostId'])
-          && hasUid(resource.data.players, request.resource.data.hostId);
+        return changed().hasOnly(['hostId'])
+          && hasUid(resource.data.players, request.resource.data.hostId)
+          && isHost();
       }
 
       // お手つき: 自分を「お休み」の列に足す。全員お休みになったら再開時刻（resumeAt）を入れる
       function isMiss() {
         let o = resource.data.gameState;
         let n = request.resource.data.gameState;
-        return isMember()
-          && resource.data.status == 'playing'
+        return resource.data.status == 'playing'
           && changed().hasOnly(['gameState'])
           && gsChanged().hasOnly(['bannedPlayerIds', 'resumeAt'])
           && o.resumeAt == null
           && !(me() in o.bannedPlayerIds)
           && n.bannedPlayerIds == o.bannedPlayerIds.concat([me()])
           && (n.resumeAt == null
-              || (n.resumeAt is number && n.bannedPlayerIds.size() >= resource.data.players.size()));
+              || (n.resumeAt is number && n.bannedPlayerIds.size() >= resource.data.players.size()))
+          && isMember();
       }
 
       // お休みの解除（ホスト）
       function isClearBans() {
-        return isHost()
-          && resource.data.status == 'playing'
+        return resource.data.status == 'playing'
           && changed().hasOnly(['gameState'])
           && gsChanged().hasOnly(['bannedPlayerIds', 'resumeAt'])
           && request.resource.data.gameState.bannedPlayerIds == []
-          && request.resource.data.gameState.resumeAt == null;
+          && request.resource.data.gameState.resumeAt == null
+          && isHost();
       }
 
       // 札を取る: 今読んでいる札を場から1枚消し、自分の点を +1、取った人を自分にする
       function isTake() {
         let o = resource.data.gameState;
         let n = request.resource.data.gameState;
-        return isMember()
-          && resource.data.status == 'playing'
+        return resource.data.status == 'playing'
           && changed().hasOnly(['gameState', 'players'])
           && gsChanged().hasOnly(['boardCards', 'lastWinnerId', 'advanceAt'])
           && o.resumeAt == null
@@ -215,15 +216,15 @@ service cloud.firestore {
           && n.advanceAt is number
           && request.resource.data.players.size() == resource.data.players.size()
           && tookAt(0) && tookAt(1) && tookAt(2) && tookAt(3) && tookAt(4)
-          && tookAt(5) && tookAt(6) && tookAt(7) && tookAt(8) && tookAt(9);
+          && tookAt(5) && tookAt(6) && tookAt(7) && tookAt(8) && tookAt(9)
+          && isMember();
       }
 
       // 次の札へ（ホスト）。札が取られて advanceAt が入っているときだけ、1枚ずつ進める
       function isNextTurn() {
         let o = resource.data.gameState;
         let n = request.resource.data.gameState;
-        return isHost()
-          && resource.data.status == 'playing'
+        return resource.data.status == 'playing'
           && changed().hasOnly(['gameState'])
           && gsChanged().hasOnly(['currentCardIndex', 'currentReadingId', 'readStartTime', 'lastWinnerId', 'bannedPlayerIds', 'resumeAt', 'advanceAt'])
           && o.advanceAt != null
@@ -234,41 +235,54 @@ service cloud.firestore {
           && n.lastWinnerId == null
           && n.bannedPlayerIds == []
           && n.resumeAt == null
-          && n.advanceAt == null;
+          && n.advanceAt == null
+          && isHost();
       }
 
       // ゲーム終了（ホスト）。最後の札が取られたあとだけ
       function isFinish() {
         let o = resource.data.gameState;
-        return isHost()
-          && resource.data.status == 'playing'
+        return resource.data.status == 'playing'
           && changed().hasOnly(['status', 'gameState'])
           && request.resource.data.status == 'finished'
           && gsChanged().hasOnly(['advanceAt'])
           && request.resource.data.gameState.advanceAt == null
           && o.advanceAt != null
-          && o.currentCardIndex + 1 >= o.deck.size();
+          && o.currentCardIndex + 1 >= o.deck.size()
+          && isHost();
       }
 
       // 待機室に戻る（ホスト）
       function isBackToLobby() {
-        return isHost()
-          && resource.data.status in ['finished', 'playing']
+        return resource.data.status in ['finished', 'playing']
           && changed().hasOnly(['status'])
-          && request.resource.data.status == 'waiting';
+          && request.resource.data.status == 'waiting'
+          && isHost();
       }
 
       // 退出（ほかに人が残る場合）: 自分を外す。自分がホストなら、残った先頭の人がホストになる
       function isLeave() {
         let o = resource.data;
         let n = request.resource.data;
-        return isMember()
-          && changed().hasOnly(['players', 'hostId'])
+        return changed().hasOnly(['players', 'hostId'])
           && (removedSelfAt(0) || removedSelfAt(1) || removedSelfAt(2) || removedSelfAt(3) || removedSelfAt(4)
               || removedSelfAt(5) || removedSelfAt(6) || removedSelfAt(7) || removedSelfAt(8) || removedSelfAt(9))
           && n.players.size() >= 1
           && ((o.hostId == me() && n.hostId == n.players[0].uid)
-              || (o.hostId != me() && n.hostId == o.hostId));
+              || (o.hostId != me() && n.hostId == o.hostId))
+          && isMember();
+      }
+
+      // 変わった項目（k）ごとに、ありうる操作だけを確かめる
+      function updateOk(k) {
+        return (k.hasOnly(['players', 'hostId']) && k.hasAny(['players']) && (isLeave() || isJoin()))
+          || (k.hasOnly(['hostId']) && isTransferHost())
+          || (k.hasOnly(['settings']) && isSettings())
+          || (k.hasOnly(['status']) && isBackToLobby())
+          || (k.hasOnly(['gameState']) && (isMiss() || isClearBans() || isNextTurn()))
+          || (k.hasOnly(['gameState', 'players']) && k.hasAll(['gameState', 'players']) && isTake())
+          // 開始は、全員の点がもともと 0 なら players が変わらないので、ここでまとめて確かめる
+          || (k.hasOnly(['status', 'players', 'gameState']) && k.hasAll(['status', 'gameState']) && (isFinish() || isStart() || isJoinAndStart()));
       }
 
       // ---- 許可 ----
@@ -301,13 +315,9 @@ service cloud.firestore {
            };
 
       // 書きかえ: 上の操作のどれかに当てはまるときだけ
-      allow update: if signedIn() && (
-           isJoin() || isJoinAndStart() || isStart()
-        || isSettings() || isTransferHost()
-        || isMiss() || isClearBans() || isTake()
-        || isNextTurn() || isFinish() || isBackToLobby()
-        || isLeave()
-      );
+      // まず「変わった項目」で操作の候補をしぼり、当てはまる操作だけを確かめる。
+      // （全部の操作を順に確かめると、1回の書き込みで確かめられる上限 1000 回を超えてしまうため）
+      allow update: if signedIn() && updateOk(request.resource.data.diff(resource.data).affectedKeys());
 
       // 消す: 最後の1人が退出するとき、またはプライベート部屋のホストが退出するとき
       allow delete: if isMember()
