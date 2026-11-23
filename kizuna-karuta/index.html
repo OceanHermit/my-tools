@@ -82,6 +82,10 @@
     <div id="root"></div>
 
     <script>
+        // HTML に入れる文字のエスケープ（エラー文にも入力値が混ざることがある）
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         // エラーハンドリング強化（トースト通知）
         function showError(title, detail) {
             const container = document.getElementById('error-console');
@@ -90,8 +94,8 @@
 
             const html = `
                 <div id="${id}" class="error-toast">
-                    <strong>⚠️ ${title}</strong>
-                    <span>${detailText}</span>
+                    <strong>⚠️ ${esc(title)}</strong>
+                    <span>${esc(detailText)}</span>
                     <div style="text-align:right; margin-top:4px;">
                         <button onclick="document.getElementById('${id}').remove()" style="color:#9ca3af; text-decoration:underline; font-size:11px;">閉じる</button>
                     </div>

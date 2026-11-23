@@ -887,12 +887,12 @@ function answerHTML(ev){
   const blocks = ev.dates.map(d=>{
     const a = A.days[d];
     const bands = a.mark && a.mark!=='x' ? tlBlock(ev,d,a) : '';
-    const memo = a.mark==='t' ? `<textarea data-mm="${d}" placeholder="どんな予定次第か（例：前の会議が延びたら遅れます）">${esc(a.memo)}</textarea>`:'';
+    const memo = a.mark==='t' ? `<textarea data-mm="${esc(d)}" placeholder="どんな予定次第か（例：前の会議が延びたら遅れます）">${esc(a.memo)}</textarea>`:'';
     return `<div class="dayblock">
       <div class="dhead">
         <div class="dt">${dlabel(d)}</div>
         <div class="marks">
-          ${['o','t','x'].map(m=>`<button class="mk ${a.mark===m?'on':''}" data-m="${m}" data-mk="${d}" aria-pressed="${a.mark===m}">${m==='o'?'○':m==='t'?'△':'✕'}</button>`).join('')}
+          ${['o','t','x'].map(m=>`<button class="mk ${a.mark===m?'on':''}" data-m="${m}" data-mk="${esc(d)}" aria-pressed="${a.mark===m}">${m==='o'?'○':m==='t'?'△':'✕'}</button>`).join('')}
         </div>
       </div>${bands}${memo}</div>`;
   }).join('');
@@ -952,12 +952,12 @@ function rowsHTML(ev,a){
 }
 function tlBlock(ev,d,a){
   return `<div class="tl">
-    <div class="tl-track" data-d="${d}" role="group" aria-label="空いている時間帯">${tlInner(ev,a)}</div>
+    <div class="tl-track" data-d="${esc(d)}" role="group" aria-label="空いている時間帯">${tlInner(ev,a)}</div>
     <div class="tl-lbl mono">${tlLabels(ev)}</div>
-    <div class="brows" data-d="${d}">${rowsHTML(ev,a)}</div>
+    <div class="brows" data-d="${esc(d)}">${rowsHTML(ev,a)}</div>
     <div class="tl-acts">
-      <button class="addband" data-ba="${d}">＋ 時間帯を足す</button>
-      <button class="addband sub" data-ball="${d}">終日にする</button>
+      <button class="addband" data-ba="${esc(d)}">＋ 時間帯を足す</button>
+      <button class="addband sub" data-ball="${esc(d)}">終日にする</button>
     </div>
   </div>`;
 }
@@ -985,8 +985,8 @@ function firstGap(a, ev, want){
 }
 function paintDay(d){
   const ev=S.ev, a=A.days[d];
-  const track=document.querySelector('.tl-track[data-d="'+d+'"]');
-  const rows=document.querySelector('.brows[data-d="'+d+'"]');
+  const track=document.querySelector('.tl-track[data-d="'+CSS.escape(d)+'"]');
+  const rows=document.querySelector('.brows[data-d="'+CSS.escape(d)+'"]');
   if(track) track.innerHTML = tlInner(ev,a);
   if(rows) rows.innerHTML = rowsHTML(ev,a);
 }
