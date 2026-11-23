@@ -32,5 +32,16 @@
       "Bash(pip install:*)",
       "Bash(git push:*)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "oceanhermit": {
+      "source": {
+        "source": "github",
+        "repo": "OceanHermit/plugin"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "secure-dev@oceanhermit": true
   }
 }
