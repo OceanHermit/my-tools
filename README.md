@@ -22,7 +22,6 @@
 | かさなり | https://oceanhermit.github.io/my-tools/kasanari/ | Firebase（匿名 + Google Auth / Firestore）を利用 |
 | NEKO-ZUKAI | https://oceanhermit.github.io/my-tools/neko-zukai/ | おこづかい帳。Firebase（Google Auth / Firestore、専用プロジェクト `neko-zukai`）を利用 |
 | チラシマップ | https://oceanhermit.github.io/my-tools/chirashi-map/ | 地図（地理院タイル / OSM）＋ Firebase（匿名 Auth / Firestore、専用プロジェクト `flyer-790e5`） |
-| ビジュアルページビルダー（CMS） | https://originalcms.pages.dev/ | 別ホスティング（Cloudflare Pages + D1 + R2）。リポジトリは OceanHermit/originalCMS |
 
 ## セキュリティ
 
