@@ -353,9 +353,9 @@ body.drawing .leaflet-bottom.leaflet-right{bottom:calc(var(--drawbar-h,130px) + 
 <div id="modal"><div class="box" id="modalBox"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore-compat.js"></script>
 <script>
 "use strict";
 
@@ -1239,7 +1239,7 @@ function drawAreas(){
                      fillColor:c, fillOpacity: sel?0.07:0.16, interactive:true})
       .on("click", ()=>selectArea(a.id))
       .addTo(gArea);
-    poly.bindTooltip((a.name||"区画")+"／"+memberName(a.uid), {direction:"center", className:"unitlabel"});
+    poly.bindTooltip(esc((a.name||"区画")+"／"+memberName(a.uid)), {direction:"center", className:"unitlabel"});
   }
 }
 
@@ -1470,8 +1470,8 @@ function renderMine(){
   for(const a of pick){
     const on = S.activeAreaId===a.id;
     const p = (on && S.units.length) ? Math.round(countStat()[1]/S.units.length*100) : progressOf(a);
-    h += '<button class="btn sm '+(on?"primary":"")+'" data-pick="'+a.id+'">'
-       + '<i class="dot" style="background:'+(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
+    h += '<button class="btn sm '+(on?"primary":"")+'" data-pick="'+esc(a.id)+'">'
+       + '<i class="dot" style="background:'+esc(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
        + esc(a.name||"区画") + (p!==null? ' <span class="mono">'+p+'%</span>':'') + '</button>';
   }
   h += '</div>';
@@ -1480,7 +1480,7 @@ function renderMine(){
   if(!a){ h += '<p class="muted">上から区画を選んでください。</p>'; host.innerHTML=h; return; }
 
   const ring = ringOf(a);
-  h += '<div class="item sel"><div class="hd"><i class="dot" style="background:'+(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
+  h += '<div class="item sel"><div class="hd"><i class="dot" style="background:'+esc(a.uid?memberColor(a.uid):"#98A1B8")+'"></i>'
      + '<b>'+esc(a.name||"区画")+'</b><span class="pill">'+esc(memberName(a.uid))+'</span></div>'
      + '<p class="muted">'+fmtArea(areaM2(ring))+'</p>';
 
@@ -1567,7 +1567,7 @@ function renderMates(){
       chips.push('<span class="pill old">記録 '+esc(relTime(st.at))+'</span>');
     }
     h += '<button class="mate" data-mate="'+esc(uid)+'"'+((lv&&typeof lv.lat==="number")||areaList().some(a=>a.uid===uid)?"":" disabled")+'>'
-       + '<div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
+       + '<div class="hd"><i class="dot" style="background:'+esc(m.color)+'"></i>'
        + '<b>'+esc(memberName(uid))+(uid===S.uid?"（あなた）":"")+'</b>'
        + chips.join("")
        + '<span class="mono">'+(st.pct!==null? st.pct+"%" : "—")+'</span></div>'
@@ -1597,31 +1597,31 @@ function renderAreas(){
     h += '<div class="item'+(S.activeAreaId===p.id?" sel":"")+'">'
        + '<div class="hd"><b>'+esc(p.name||"区域")+'</b>'
        + '<span class="pill">'+fmtArea(areaM2(ring))+'</span>'
-       + '<button class="btn sm" data-zoom="'+p.id+'">表示</button></div>';
+       + '<button class="btn sm" data-zoom="'+esc(p.id)+'">表示</button></div>';
     if(isAdmin())
       h += '<div class="row wrap" style="margin-top:8px;gap:6px">'
-         + '<button class="btn sm" data-split="'+p.id+'">人数で分ける</button>'
-         + '<button class="btn sm" data-redraw="'+p.id+'">描き直す</button>'
-         + '<button class="btn sm" data-rename="'+p.id+'">名前</button>'
-         + '<button class="btn sm danger" data-del="'+p.id+'">消す</button>'
+         + '<button class="btn sm" data-split="'+esc(p.id)+'">人数で分ける</button>'
+         + '<button class="btn sm" data-redraw="'+esc(p.id)+'">描き直す</button>'
+         + '<button class="btn sm" data-rename="'+esc(p.id)+'">名前</button>'
+         + '<button class="btn sm danger" data-del="'+esc(p.id)+'">消す</button>'
          + '</div>';
     if(kids.length){
       h += '<div class="sub">';
       for(const k of kids){
         const pct=progressOf(k);
         h += '<div class="item'+(S.activeAreaId===k.id?" sel":"")+'" style="margin-top:6px">'
-           + '<div class="hd"><i class="dot" style="background:'+(k.uid?memberColor(k.uid):"#98A1B8")+'"></i>'
+           + '<div class="hd"><i class="dot" style="background:'+esc(k.uid?memberColor(k.uid):"#98A1B8")+'"></i>'
            + '<b>'+esc(k.name||"区画")+'</b>'
            + (pct!==null?'<span class="pill mono">'+pct+'%</span>':'')
-           + '<button class="btn sm" data-zoom="'+k.id+'">開く</button></div>';
+           + '<button class="btn sm" data-zoom="'+esc(k.id)+'">開く</button></div>';
         if(isAdmin()){
           h += '<div class="row" style="margin-top:6px;gap:6px">'
-             + '<select data-assign="'+k.id+'" class="grow"><option value="">未割り当て</option>';
+             + '<select data-assign="'+esc(k.id)+'" class="grow"><option value="">未割り当て</option>';
           for(const uid in S.members)
             h += '<option value="'+esc(uid)+'"'+(k.uid===uid?" selected":"")+'>'+esc(S.members[uid].name||"名なし")+'</option>';
           h += '</select>'
-             + '<button class="btn sm" data-redraw="'+k.id+'">描き直す</button>'
-             + '<button class="btn sm danger" data-del="'+k.id+'">消す</button></div>';
+             + '<button class="btn sm" data-redraw="'+esc(k.id)+'">描き直す</button>'
+             + '<button class="btn sm danger" data-del="'+esc(k.id)+'">消す</button></div>';
         }else{
           h += '<p class="muted">担当：'+esc(memberName(k.uid))+'</p>';
         }
@@ -1662,7 +1662,7 @@ function renderMembers(){
     const m=S.members[uid];
     const mine=areaList().filter(a=>a.uid===uid);
     const st=statsOf(uid), lv=S.live[uid], pct=st.pct, t=st.t, d=st.d;
-    h += '<div class="item"><div class="hd"><i class="dot" style="background:'+m.color+'"></i>'
+    h += '<div class="item"><div class="hd"><i class="dot" style="background:'+esc(m.color)+'"></i>'
        + '<b>'+esc(memberName(uid))+'</b>'
        + (m.admin?'<span class="pill">管理者</span>':'')
        + (uid===S.uid?'<span class="pill">あなた</span>':'')+'</div>'
@@ -1950,7 +1950,7 @@ function drawLive(){
     const still = lv.mv && (Date.now()-lv.mv > STILL_MS);
     L.circleMarker([lv.lat,lv.lng], {radius: stale?7:9, color:"#fff", weight:2.5,
       fillColor: still ? "#B4453F" : c, fillOpacity: stale?0.45:1})
-      .bindTooltip(nm+"／"+relTime(lv.at)+(still?"・動きなし":""),
+      .bindTooltip(esc(nm+"／"+relTime(lv.at)+(still?"・動きなし":"")),
                    {permanent:true, direction:"top", offset:[0,-6], className:"unitlabel"})
       .addTo(gLive);
   }

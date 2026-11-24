@@ -6,7 +6,7 @@
     <title>キズナかるた Online</title>
 
     <!-- CSS (Tailwind & Custom) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <style>
         .writing-vertical-rl { writing-mode: vertical-rl; text-orientation: upright; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
@@ -57,8 +57,8 @@
     </style>
 
     <!-- React Libraries -->
-    <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
     <!-- 【重要】バージョン固定。無指定(最新)だとCDN側の破壊的変更に巻き込まれる（過去に白画面化した）。 -->
     <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
     <!-- 【重要】Babel標準の最新版はJSXの既定が「自動ランタイム」になり、
@@ -71,10 +71,10 @@
     </script>
 
     <!-- Firebase Libraries (Compat版) -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-storage-compat.js"></script>
 </head>
 <body class="bg-stone-100 text-stone-800">
     <!-- エラー表示エリア -->
@@ -82,6 +82,10 @@
     <div id="root"></div>
 
     <script>
+        // HTML に入れる文字のエスケープ（エラー文にも入力値が混ざることがある）
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
         // エラーハンドリング強化（トースト通知）
         function showError(title, detail) {
             const container = document.getElementById('error-console');
@@ -90,8 +94,8 @@
 
             const html = `
                 <div id="${id}" class="error-toast">
-                    <strong>⚠️ ${title}</strong>
-                    <span>${detailText}</span>
+                    <strong>⚠️ ${esc(title)}</strong>
+                    <span>${esc(detailText)}</span>
                     <div style="text-align:right; margin-top:4px;">
                         <button onclick="document.getElementById('${id}').remove()" style="color:#9ca3af; text-decoration:underline; font-size:11px;">閉じる</button>
                     </div>

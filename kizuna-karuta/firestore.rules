@@ -1,0 +1,333 @@
+rules_version = '2';
+
+// キズナかるた（https://oceanhermit.github.io/my-tools/kizuna-karuta/）用のルール。
+// 対象プロジェクト: karuta-game-c8fc8
+// Console の Firestore →「ルール」タブに、この中身をそのまま貼る。
+//
+// 考え方
+// - ログイン（匿名でよい）していない人は何も読めない・書けない。
+// - 使うのは artifacts/karuta-v1/public/data/rooms/{roomId}（1部屋 = 1文書）だけ。ほかは全部禁止。
+// - 部屋は ID を知っていれば読める（ID を入れて入室するため）。
+//   一覧で読めるのは「ランダムマッチの待機中の部屋」だけ（相手探しに必要なため）。
+// - 部屋を作るときは、自分がホストで、参加者は自分1人だけ。決まった形のデータしか置けない。
+// - 入室は「自分1人を最後に足す」ことだけできる。ほかの人を足す・名前を変えることはできない。
+// - ゲーム中の書き込みは、その部屋の参加者だけ。操作ごとに「変えてよい項目」と「変え方」を決めている。
+//   ・札を取る: 今読んでいる札を場から1枚消し、自分の点を1点だけ増やす
+//   ・お手つき: 自分を「お休み」の列に足すだけ
+//   ・次の札へ進む・終わる・設定・親を譲る・待機室に戻る: ホストだけ
+// - 部屋を消せるのは、最後の1人か、プライベート部屋のホストだけ（アプリの「退出」と同じ）。
+// - 1部屋の参加者は最大 10 人、名前は 30 文字まで、札は 50 枚まで。
+//
+// できてしまうこと（ゲームの判定はブラウザで動いているため、ルールでは防げない）
+// - 同じ部屋の参加者が、読み上げを待たずに機械的に「取る」書き込みを送る（反応速度のずる）。
+// - ホストが札の順番を自分で決める・次の札へ早く進める。
+// - 時刻（readStartTime / advanceAt / resumeAt）の値はごまかせる（端末の時計を使うため）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /artifacts/karuta-v1/public/data/rooms/{roomId} {
+
+      function signedIn() { return request.auth != null; }
+      function me() { return request.auth.uid; }
+
+      // 参加者の一覧（players）の i 番目が uid の人か。
+      // ルールでは「リストの中から探す」書き方ができないので、0〜9 番目を順に確かめる（＝最大 10 人）。
+      function uidAt(p, i, u) { return p.size() > i && p[i].uid == u; }
+      function hasUid(p, u) {
+        return uidAt(p, 0, u) || uidAt(p, 1, u) || uidAt(p, 2, u) || uidAt(p, 3, u) || uidAt(p, 4, u)
+            || uidAt(p, 5, u) || uidAt(p, 6, u) || uidAt(p, 7, u) || uidAt(p, 8, u) || uidAt(p, 9, u);
+      }
+
+      function isMember() { return signedIn() && hasUid(resource.data.players, me()); }
+      // ホストかどうかを先に確かめる（参加者の一覧を調べるのは重いので後にする）
+      function isHost()   { return signedIn() && resource.data.hostId == me() && hasUid(resource.data.players, me()); }
+
+      // 今回の書き込みで変わった項目
+      function changed()   { return request.resource.data.diff(resource.data).affectedKeys(); }
+      function gsChanged() { return request.resource.data.gameState.diff(resource.data.gameState).affectedKeys(); }
+
+      // 部屋の有効期限（アプリと同じ 30 分）
+      function notExpired() { return request.time < resource.data.createdAt + duration.value(30, 'm'); }
+
+      function validName(n) { return n is string && n.size() >= 1 && n.size() <= 30; }
+
+      // 新しく入る参加者（自分）の形
+      function validNewPlayer(e) {
+        return e is map
+          && e.keys().hasAll(['uid', 'name', 'score', 'joinedAt'])
+          && e.keys().hasOnly(['uid', 'name', 'score', 'joinedAt'])
+          && e.uid == me()
+          && validName(e.name)
+          && e.score == 0
+          && e.joinedAt is number;
+      }
+
+      // 設定（使う札の枚数 5〜50）
+      function validSettings(s) {
+        return s is map
+          && s.keys().hasOnly(['cardCount'])
+          && s.cardCount is int && s.cardCount >= 5 && s.cardCount <= 50;
+      }
+
+      // ゲーム開始時の gameState の形
+      function validStartState(g) {
+        return g is map
+          && g.keys().hasAll(['deck', 'boardCards', 'currentCardIndex', 'currentReadingId', 'readStartTime', 'lastWinnerId', 'bannedPlayerIds', 'resumeAt', 'advanceAt'])
+          && g.keys().hasOnly(['deck', 'boardCards', 'currentCardIndex', 'currentReadingId', 'readStartTime', 'lastWinnerId', 'bannedPlayerIds', 'resumeAt', 'advanceAt'])
+          && g.deck is list && g.deck.size() >= 1 && g.deck.size() <= 50
+          && g.deck.toSet().size() == g.deck.size()
+          && g.boardCards is list && g.boardCards.size() == g.deck.size()
+          && g.boardCards.toSet() == g.deck.toSet()
+          && g.currentCardIndex == 0
+          && g.currentReadingId == g.deck[0]
+          && g.readStartTime is number
+          && g.lastWinnerId == null
+          && g.bannedPlayerIds == []
+          && g.resumeAt == null
+          && g.advanceAt == null;
+      }
+
+      // ゲーム開始: 参加者はそのまま、点だけ 0 に戻す
+      function resetAt(i) {
+        let o = resource.data.players;
+        let n = request.resource.data.players;
+        return o.size() <= i
+          || (n[i].diff(o[i]).affectedKeys().hasOnly(['score']) && n[i].score == 0);
+      }
+      function playersReset() {
+        return request.resource.data.players.size() == resource.data.players.size()
+          && resetAt(0) && resetAt(1) && resetAt(2) && resetAt(3) && resetAt(4)
+          && resetAt(5) && resetAt(6) && resetAt(7) && resetAt(8) && resetAt(9);
+      }
+
+      // 札を取った: ほかの人はそのまま、自分の点だけ +1
+      function tookAt(i) {
+        let o = resource.data.players;
+        let n = request.resource.data.players;
+        return o.size() <= i
+          || (o[i].uid != me() && n[i] == o[i])
+          || (o[i].uid == me()
+              && n[i].diff(o[i]).affectedKeys().hasOnly(['score'])
+              && n[i].score == o[i].score + 1);
+      }
+
+      // 退出: 自分（k 番目）だけを一覧から外す
+      function removedSelfAt(k) {
+        let o = resource.data.players;
+        return o.size() > k && o[k].uid == me()
+          && request.resource.data.players == o.removeAll([o[k]]);
+      }
+
+      // ---- 書き込みの種類（アプリの操作ごと） ----
+
+      // 入室: 待機中・期限内の部屋に、自分1人を最後に足す
+      function isJoin() {
+        let o = resource.data;
+        let n = request.resource.data;
+        return signedIn()
+          && o.status == 'waiting' && notExpired()
+          && !hasUid(o.players, me())
+          && changed().hasOnly(['players'])
+          && n.players.size() == o.players.size() + 1
+          && n.players.size() <= 10
+          && n.players[0:o.players.size()] == o.players
+          && validNewPlayer(n.players[o.players.size()]);
+      }
+
+      // ランダムマッチで2人目が入った瞬間に、そのままゲームを始める（入室と開始が1回の書き込みになる場合）
+      function isJoinAndStart() {
+        let o = resource.data;
+        let n = request.resource.data;
+        return signedIn()
+          && o.type == 'random' && o.status == 'waiting' && notExpired()
+          && !hasUid(o.players, me())
+          && changed().hasOnly(['players', 'status', 'gameState'])
+          && n.status == 'playing'
+          && o.players.size() == 1 && n.players.size() == 2
+          && n.players[0].diff(o.players[0]).affectedKeys().hasOnly(['score'])
+          && n.players[0].score == 0
+          && validNewPlayer(n.players[1])
+          && validStartState(n.gameState);
+      }
+
+      // ゲーム開始（ホスト。ランダムマッチは入った2人目が始めるので参加者なら可）
+      function isStart() {
+        return resource.data.status == 'waiting'
+          && changed().hasOnly(['status', 'players', 'gameState'])
+          && request.resource.data.status == 'playing'
+          && playersReset()
+          && validStartState(request.resource.data.gameState)
+          && (resource.data.hostId == me() || resource.data.type == 'random')
+          && isMember();
+      }
+
+      // 設定の変更（ホスト・待機中）
+      function isSettings() {
+        return resource.data.status == 'waiting'
+          && changed().hasOnly(['settings'])
+          && validSettings(request.resource.data.settings)
+          && isHost();
+      }
+
+      // 親（ホスト）を譲る: 今のホストが、部屋にいる人へ
+      function isTransferHost() {
+        return changed().hasOnly(['hostId'])
+          && hasUid(resource.data.players, request.resource.data.hostId)
+          && isHost();
+      }
+
+      // お手つき: 自分を「お休み」の列に足す。全員お休みになったら再開時刻（resumeAt）を入れる
+      function isMiss() {
+        let o = resource.data.gameState;
+        let n = request.resource.data.gameState;
+        return resource.data.status == 'playing'
+          && changed().hasOnly(['gameState'])
+          && gsChanged().hasOnly(['bannedPlayerIds', 'resumeAt'])
+          && o.resumeAt == null
+          && !(me() in o.bannedPlayerIds)
+          && n.bannedPlayerIds == o.bannedPlayerIds.concat([me()])
+          && (n.resumeAt == null
+              || (n.resumeAt is number && n.bannedPlayerIds.size() >= resource.data.players.size()))
+          && isMember();
+      }
+
+      // お休みの解除（ホスト）
+      function isClearBans() {
+        return resource.data.status == 'playing'
+          && changed().hasOnly(['gameState'])
+          && gsChanged().hasOnly(['bannedPlayerIds', 'resumeAt'])
+          && request.resource.data.gameState.bannedPlayerIds == []
+          && request.resource.data.gameState.resumeAt == null
+          && isHost();
+      }
+
+      // 札を取る: 今読んでいる札を場から1枚消し、自分の点を +1、取った人を自分にする
+      function isTake() {
+        let o = resource.data.gameState;
+        let n = request.resource.data.gameState;
+        return resource.data.status == 'playing'
+          && changed().hasOnly(['gameState', 'players'])
+          && gsChanged().hasOnly(['boardCards', 'lastWinnerId', 'advanceAt'])
+          && o.resumeAt == null
+          && !(me() in o.bannedPlayerIds)
+          && o.currentReadingId in o.boardCards
+          && n.boardCards == o.boardCards.removeAll([o.currentReadingId])
+          && n.lastWinnerId == me()
+          && n.advanceAt is number
+          && request.resource.data.players.size() == resource.data.players.size()
+          && tookAt(0) && tookAt(1) && tookAt(2) && tookAt(3) && tookAt(4)
+          && tookAt(5) && tookAt(6) && tookAt(7) && tookAt(8) && tookAt(9)
+          && isMember();
+      }
+
+      // 次の札へ（ホスト）。札が取られて advanceAt が入っているときだけ、1枚ずつ進める
+      function isNextTurn() {
+        let o = resource.data.gameState;
+        let n = request.resource.data.gameState;
+        return resource.data.status == 'playing'
+          && changed().hasOnly(['gameState'])
+          && gsChanged().hasOnly(['currentCardIndex', 'currentReadingId', 'readStartTime', 'lastWinnerId', 'bannedPlayerIds', 'resumeAt', 'advanceAt'])
+          && o.advanceAt != null
+          && n.currentCardIndex == o.currentCardIndex + 1
+          && n.currentCardIndex < o.deck.size()
+          && n.currentReadingId == o.deck[n.currentCardIndex]
+          && n.readStartTime is number
+          && n.lastWinnerId == null
+          && n.bannedPlayerIds == []
+          && n.resumeAt == null
+          && n.advanceAt == null
+          && isHost();
+      }
+
+      // ゲーム終了（ホスト）。最後の札が取られたあとだけ
+      function isFinish() {
+        let o = resource.data.gameState;
+        return resource.data.status == 'playing'
+          && changed().hasOnly(['status', 'gameState'])
+          && request.resource.data.status == 'finished'
+          && gsChanged().hasOnly(['advanceAt'])
+          && request.resource.data.gameState.advanceAt == null
+          && o.advanceAt != null
+          && o.currentCardIndex + 1 >= o.deck.size()
+          && isHost();
+      }
+
+      // 待機室に戻る（ホスト）
+      function isBackToLobby() {
+        return resource.data.status in ['finished', 'playing']
+          && changed().hasOnly(['status'])
+          && request.resource.data.status == 'waiting'
+          && isHost();
+      }
+
+      // 退出（ほかに人が残る場合）: 自分を外す。自分がホストなら、残った先頭の人がホストになる
+      function isLeave() {
+        let o = resource.data;
+        let n = request.resource.data;
+        return changed().hasOnly(['players', 'hostId'])
+          && (removedSelfAt(0) || removedSelfAt(1) || removedSelfAt(2) || removedSelfAt(3) || removedSelfAt(4)
+              || removedSelfAt(5) || removedSelfAt(6) || removedSelfAt(7) || removedSelfAt(8) || removedSelfAt(9))
+          && n.players.size() >= 1
+          && ((o.hostId == me() && n.hostId == n.players[0].uid)
+              || (o.hostId != me() && n.hostId == o.hostId))
+          && isMember();
+      }
+
+      // 変わった項目（k）ごとに、ありうる操作だけを確かめる
+      function updateOk(k) {
+        return (k.hasOnly(['players', 'hostId']) && k.hasAny(['players']) && (isLeave() || isJoin()))
+          || (k.hasOnly(['hostId']) && isTransferHost())
+          || (k.hasOnly(['settings']) && isSettings())
+          || (k.hasOnly(['status']) && isBackToLobby())
+          || (k.hasOnly(['gameState']) && (isMiss() || isClearBans() || isNextTurn()))
+          || (k.hasOnly(['gameState', 'players']) && k.hasAll(['gameState', 'players']) && isTake())
+          // 開始は、全員の点がもともと 0 なら players が変わらないので、ここでまとめて確かめる
+          || (k.hasOnly(['status', 'players', 'gameState']) && k.hasAll(['status', 'gameState']) && (isFinish() || isStart() || isJoinAndStart()));
+      }
+
+      // ---- 許可 ----
+
+      // 読む: 部屋 ID を知っていれば読める（入室・観戦のため）
+      allow get: if signedIn();
+
+      // 一覧: ランダムマッチの相手探し（status == 'waiting' かつ type == 'random' の検索）だけ
+      allow list: if signedIn()
+        && resource.data.type == 'random'
+        && resource.data.status == 'waiting';
+
+      // 部屋を作る: 自分がホスト、参加者は自分1人、決まった形だけ
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['roomId', 'status', 'hostId', 'type', 'createdAt', 'settings', 'players', 'gameState'])
+        && request.resource.data.keys().hasOnly(['roomId', 'status', 'hostId', 'type', 'createdAt', 'settings', 'players', 'gameState'])
+        && request.resource.data.roomId == roomId
+        && roomId.size() >= 1 && roomId.size() <= 30
+        && request.resource.data.status == 'waiting'
+        && request.resource.data.hostId == me()
+        && request.resource.data.type in ['random', 'private']
+        && request.resource.data.createdAt == request.time
+        && validSettings(request.resource.data.settings)
+        && request.resource.data.players is list
+        && request.resource.data.players.size() == 1
+        && validNewPlayer(request.resource.data.players[0])
+        && request.resource.data.gameState == {
+             'deck': [], 'boardCards': [], 'currentCardIndex': null, 'readStartTime': null,
+             'correctCardId': null, 'bannedPlayerIds': [], 'resumeAt': null
+           };
+
+      // 書きかえ: 上の操作のどれかに当てはまるときだけ
+      // まず「変わった項目」で操作の候補をしぼり、当てはまる操作だけを確かめる。
+      // （全部の操作を順に確かめると、1回の書き込みで確かめられる上限 1000 回を超えてしまうため）
+      allow update: if signedIn() && updateOk(request.resource.data.diff(resource.data).affectedKeys());
+
+      // 消す: 最後の1人が退出するとき、またはプライベート部屋のホストが退出するとき
+      allow delete: if isMember()
+        && (resource.data.players.size() == 1
+            || (resource.data.type == 'private' && resource.data.hostId == me()));
+    }
+
+    // ほかの場所は読み書きできない
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

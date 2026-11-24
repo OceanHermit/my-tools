@@ -322,9 +322,9 @@ button.cal-d:active{background:var(--cream)}
 
 <div class="wrap" id="app"></div>
 
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore-compat.js"></script>
 <script src="cat.js?v=20261116e"></script>
 <script src="yarn.js?v=20261116e"></script>
 <script src="breeds/breeds.js?v=20261116e"></script>
@@ -748,7 +748,7 @@ function pageList(c){
         const sum = list.reduce((s,e) => s + e.amount, 0);
         return `<div class="day">
           <div class="day-h"><span>${md(day)}</span><span class="num">${yen(sum)}</span></div>
-          ${list.map(e => `<button class="ent" data-id="${e.id}">
+          ${list.map(e => `<button class="ent" data-id="${esc(e.id)}">
             <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
             <span class="yen num">${yen(e.amount)}</span></button>`).join('')}
         </div>`;
@@ -769,7 +769,7 @@ function pageSave(c){
     </section>
     <div class="zk-h"><h2>ほしいもの</h2></div>
     <div class="scroll">
-      ${wishes.length ? wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${w.id}" style="background:var(--paper);border:1.5px solid var(--line)">
+      ${wishes.length ? wishes.map((w, i) => `<button class="wish ${w.ready ? 'ready' : ''}" data-id="${esc(w.id)}" style="background:var(--paper);border:1.5px solid var(--line)">
         <span class="wish-top"><span class="wish-n">${i + 1}. ${esc(w.name)}</span><span class="num">${w.ready ? '買えるにゃ！' : `${yen(w.got)} / ${yen(w.price)}`}</span></span>
         <span class="bar" style="margin-top:0"><i style="width:${Math.round(w.got / w.price * 100)}%"></i></span></button>`).join('')
         : '<p class="empty">ほしいものを足すと、貯金がどこまで届いたか見られるにゃ</p>'}
@@ -989,7 +989,7 @@ function openDay(date, c){
   if(!list.length && !late) return openEntry(null, date);
   const { sheet, close } = openSheet(`
     <h3>${md(date)} の記録</h3>
-    ${list.length ? list.map(e => `<button class="ent" data-id="${e.id}">
+    ${list.length ? list.map(e => `<button class="ent" data-id="${esc(e.id)}">
       <span class="memo ${e.memo ? '' : 'none'}">${e.amount === 0 && !e.memo ? '使わなかった日' : esc(e.memo || 'メモなし')}</span>
       <span class="yen num">${yen(e.amount)}</span></button>`).join('') : '<p class="empty">この日の記録はないにゃ</p>'}
     ${late ? '<p class="note" style="text-align:left">1週間をすぎてから入れた日は、お金の計算には入るけど、連続記録とプレゼントの「記録した日」には数えないにゃ</p>' : ''}
@@ -1014,7 +1014,7 @@ function openWish(id){
     <h3>${w ? 'ほしいもの' : 'ほしいものを足す'}</h3>
     <div class="form">
       <label>なまえ<input class="field" id="w-name" maxlength="20" value="${w ? esc(w.name) : ''}" placeholder="例: スニーカー"></label>
-      <label>ねだん<div class="yen-field"><input class="field num" id="w-price" inputmode="numeric" value="${w ? w.price : ''}" placeholder="12000"></div></label>
+      <label>ねだん<div class="yen-field"><input class="field num" id="w-price" inputmode="numeric" value="${w ? esc(w.price) : ''}" placeholder="12000"></div></label>
       <p class="err" id="w-err"></p>
     </div>
     ${plan && plan.ready ? '<button class="btn" id="w-buy">貯金で買ったにゃ！</button>' : ''}
@@ -1088,7 +1088,7 @@ function faceOpt(lv, face){
   return {};
 }
 function makeCat(lv = 1, face = 'normal', key = 'nk', color = catColor()){
-  const opt = { ...faceOpt(lv, face), color }, ck = `${key}-${color}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
+  const opt = { ...faceOpt(lv, face), color }, ck = `${key}-${String(color).replace(/[^\w-]/g, '')}-${lv}-${opt.eye || ''}-${opt.mouth || ''}`;
   if(!catCache[ck]) catCache[ck] = isBreed(color) ? nekoBreed(color, ck, lv, opt) : window.nekoCat ? nekoCat(lv, ck, opt) : '<svg class="cat" viewBox="0 0 240 230"></svg>';
   const box = document.createElement('div'); box.innerHTML = catCache[ck];
   const svg = box.firstElementChild;
@@ -1139,7 +1139,7 @@ function openEntry(edit, presetDate){
     <h3>${edit ? '記録をなおす' : '使ったお金'}</h3>
     <div class="disp num"><small>¥</small><span id="val"></span></div>
     <div class="row2">
-      <label class="date-chip"><span id="date-txt"></span> ▾<input type="date" id="date" max="${todayStr()}" min="${data.start}"></label>
+      <label class="date-chip"><span id="date-txt"></span> ▾<input type="date" id="date" max="${todayStr()}" min="${esc(data.start)}"></label>
       <input class="field" id="memo" placeholder="メモ（例: ランチ）" maxlength="40" value="${edit ? esc(edit.memo) : ''}">
     </div>
     ${!edit && favs.length ? `<div class="favs">${favs.map((f,i) =>
@@ -1209,7 +1209,7 @@ function settingsForm(v){
           <span class="color-cat" data-cat="${c.id}"></span><span>${c.name}</span></button>`).join('')}</div>
       </div>` : ''}
       <label>毎月自由に使えるお金
-        <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${v.amount || ''}" placeholder="30000"></div>
+        <div class="yen-field"><input class="field num" id="f-amount" inputmode="numeric" value="${esc(v.amount || '')}" placeholder="30000"></div>
       </label>
       <label>お金が加算される日<span class="hint">29〜31日を選ぶと、短い月は月末に加算します</span>
         <select class="field" id="f-payday">${Array.from({length:31}, (_,i) => `<option value="${i+1}" ${i+1 === v.payday ? 'selected' : ''}>毎月 ${i+1}日</option>`).join('')}</select>
@@ -1297,7 +1297,7 @@ function openSettings(){
     <h3>設定</h3>
     ${settingsForm({ catName: data.catName, amount: cfg.amount, payday: cfg.payday, color: catColor() })}
     <p class="hint" style="font-size:12px;color:var(--soft)">金額と加算日を変えると、次の加算日（${md(c0.next)}）から変わるにゃ。今期はそのままだにゃ。ネコを変えるときは「図鑑」のタブからだにゃ。
-      ${pending ? `<br>いまは 毎月 ${yen(now.amount)}・${now.payday}日。${md(c0.next)} から上の内容になるにゃ` : ''}</p>
+      ${pending ? `<br>いまは 毎月 ${yen(now.amount)}・${esc(now.payday)}日。${md(c0.next)} から上の内容になるにゃ` : ''}</p>
     <button class="btn" id="s-save" style="margin-top:12px">保存する</button>
     <button class="btn ghost" id="s-widget" style="margin-top:14px">ホーム画面のウィジェットを設定する</button>
     <div class="acct">
@@ -1365,7 +1365,7 @@ function newToken(){
    ウィジェットの見た目や計算を直しても、貼り直さなくてよい。読めないときは、前に読んだものを使う */
 function widgetScript(token){
   return `// NEKO-ZUKAI ウィジェット（小）。Scriptable に貼って使う。中身は自動で新しくなる
-const TOKEN = "${token}";
+const TOKEN = ${JSON.stringify(String(token))};
 const SRC = "https://oceanhermit.github.io/my-tools/neko-zukai/widget/widget.js";
 const fm = FileManager.local(), path = fm.joinPath(fm.documentsDirectory(), "neko-zukai-widget.js");
 try{
